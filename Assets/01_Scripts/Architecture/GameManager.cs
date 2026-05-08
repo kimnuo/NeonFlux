@@ -1,6 +1,6 @@
 using UnityEngine;
 
-public enum GameState { MainMenu, Playing, GameOver }
+public enum GameState { MainMenu, Playing, StageClear, GameOver }
 
 public class GameManager : Singleton<GameManager>
 {
@@ -9,7 +9,7 @@ public class GameManager : Singleton<GameManager>
     protected override void Awake()
     {
         base.Awake();
-        CurrentState = GameState.MainMenu;
+        CurrentState = GameState.Playing;
     }
 
     public void StartGame()
@@ -20,10 +20,10 @@ public class GameManager : Singleton<GameManager>
 
     public void EndGame()
     {
-        if (CurrentState == GameState.GameOver) return;
+        if (CurrentState != GameState.Playing) return;
 
         CurrentState = GameState.GameOver;
-        Debug.Log("Game Over!");
+        Debug.Log("Game Over! 장애물에 충돌했습니다.");
 
         // 디스크에 영구 데이터 보존
         if (SaveManager.Instance != null)
@@ -36,5 +36,22 @@ public class GameManager : Singleton<GameManager>
         {
             AdMobManager.Instance.ShowRewardedAd();
         }
+    }
+
+    public void CompleteStage()
+    {
+        if (CurrentState != GameState.Playing) return;
+
+        CurrentState = GameState.StageClear;
+        Debug.Log("Stage Cleared! 결승선을 통과했습니다.");
+
+        // 데이터 저장 로직
+        if (SaveManager.Instance != null)
+        {
+            SaveManager.Instance.CurrentData.currentStageLevel++;
+            SaveManager.Instance.SaveData();
+        }
+
+        // 여기에 승리 UI를 띄우는 코드를 추가할 예정입니다.
     }
 }

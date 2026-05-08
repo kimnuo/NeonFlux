@@ -8,4 +8,5 @@ public class PlayerSaveData
     public int currentCoins;
     public int currentSpeedLevel;
     public int currentDriftLevel;
+    public int currentStageLevel;
 }

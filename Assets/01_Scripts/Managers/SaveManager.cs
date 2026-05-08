@@ -38,7 +38,13 @@ public class SaveManager : Singleton<SaveManager>
         else
         {
             // 신규 유저 초기값 세팅
-            CurrentData = new PlayerSaveData { currentCoins = 0, currentSpeedLevel = 1, currentDriftLevel = 1 };
+            CurrentData = new PlayerSaveData
+            {
+                currentCoins = 0,
+                currentSpeedLevel = 1,
+                currentDriftLevel = 1,
+                currentStageLevel = 1
+            };
         }
     }
 
