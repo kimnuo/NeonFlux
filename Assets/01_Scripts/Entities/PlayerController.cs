@@ -92,13 +92,11 @@ public class PlayerController : MonoBehaviour
         bool driftInput = autoDriftBySteer && Mathf.Abs(steerInput) >= autoDriftSteerThreshold;
 
         bool hasGround = TryGetGroundNormal(out Vector3 groundNormal);
-        ApplyInitialForwardSpeed();
         UpdateSteering(steerInput);
         ApplyVelocity(steerInput, driftInput, hasGround, groundNormal);
         ApplyRotation(steerInput, hasGround, groundNormal);
         ApplyStepAssist();
     }
-
     private float GetSteerInput()
     {
         float slideInput = InputManager.Instance != null ? InputManager.Instance.SlideDirection : 0f;
