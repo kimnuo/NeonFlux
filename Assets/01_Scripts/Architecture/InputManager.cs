@@ -10,11 +10,13 @@ public class InputManager : Singleton<InputManager>
     [SerializeField] private bool useFixedSlideBar = true;
     [SerializeField] private bool autoCreateSlideBar = true;
     [SerializeField] private FixedSlideBar fixedSlideBar;
+    [SerializeField] [Min(0.1f)] private float fixedSlideBarSensitivity = 3.6f;
+    [SerializeField] [Min(1f)] private float fixedSlideBarInputSmoothing = 28f;
 
     [Header("슬라이드 입력 설정")]
     [SerializeField] private float referenceWidth = 1080f;
     [SerializeField] private float dragDeadZonePixels = 2f;
-    [SerializeField] private float fullSwipePixels = 28f;
+    [SerializeField] private float fullSwipePixels = 14f;
     [SerializeField] private float inputSmoothing = 14f;
     [SerializeField] private float releaseDamping = 10f;
     [SerializeField] private float inputSnapThreshold = 0.03f;
@@ -42,7 +44,9 @@ public class InputManager : Singleton<InputManager>
         if (useFixedSlideBar && fixedSlideBar != null)
         {
             IsHolding = fixedSlideBar.IsInteracting;
-            float targetDirection = IsHolding ? fixedSlideBar.NormalizedX : 0f;
+            float targetDirection = IsHolding
+                ? Mathf.Clamp(fixedSlideBar.NormalizedX * fixedSlideBarSensitivity, -1f, 1f)
+                : 0f;
             if (Mathf.Abs(targetDirection) < inputSnapThreshold) targetDirection = 0f;
 
             if (!IsHolding)
@@ -51,7 +55,7 @@ public class InputManager : Singleton<InputManager>
             }
             else
             {
-                SlideDirection = Mathf.Lerp(SlideDirection, targetDirection, Time.deltaTime * inputSmoothing);
+                SlideDirection = Mathf.Lerp(SlideDirection, targetDirection, Time.deltaTime * fixedSlideBarInputSmoothing);
             }
 
             if (Mathf.Abs(SlideDirection) < inputSnapThreshold) SlideDirection = 0f;

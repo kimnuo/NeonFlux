@@ -12,11 +12,13 @@ public class PlayerController : MonoBehaviour
 
     [Header("Steer")]
     public float steeringInputDeadZone = 0.03f;
-    public float maxSteerAngle = 28f;
+    public float maxSteerAngle = 45f;
     public float steerResponse = 140f;
     public float steerYawMultiplier = 1.9f;
     public float steerSpeedReference = 20f;
     public AnimationCurve steerBySpeed = new AnimationCurve(new Keyframe(0f, 1f), new Keyframe(1f, 0.35f));
+    public bool limitHeadingToForward = true;
+    [Range(1f, 89f)] public float maxHeadingOffsetFromStart = 80f;
 
     [Header("Drift / Grip")]
     public bool autoDriftBySteer = true;
@@ -32,6 +34,14 @@ public class PlayerController : MonoBehaviour
     public float groundStickForce = 0.5f;
     public float verticalVelocityBlend = 8f;
     public LayerMask groundLayerMask = ~0;
+    public bool suppressSeamBounce = true;
+    [Min(0f)] public float groundedMaxRiseSpeed = 0.15f;
+    [Min(0f)] public float groundedRiseAllowance = 0.08f;
+    [Min(0.1f)] public float maxDepenetrationSpeed = 1.2f;
+    [Range(0.05f, 1f)] public float groundNormalLerp = 0.35f;
+    [Min(0f)] public float desiredGroundClearance = 0.08f;
+    [Min(0f)] public float clearanceAdjustStrength = 14f;
+    [Min(0f)] public float maxClearanceRiseSpeed = 0.35f;
 
     [Header("Pitch Align")]
     public bool alignPitchToRoad = true;
@@ -55,14 +65,35 @@ public class PlayerController : MonoBehaviour
     private Collider _bodyCollider;
     private float _yawAngle;
     private float _steerAngle;
+    private float _initialYawAngle;
+    private Vector3 _smoothedGroundNormal = Vector3.up;
+    private float _currentGroundClearance;
 
     private void Awake()
     {
         _rb = GetComponent<Rigidbody>();
         _bodyCollider = GetComponent<Collider>();
         _rb.interpolation = RigidbodyInterpolation.Interpolate;
+        _rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+        _rb.maxDepenetrationVelocity = maxDepenetrationSpeed;
+
+        if (_bodyCollider != null)
+        {
+            PhysicMaterial noBounceMaterial = _bodyCollider.material;
+            if (noBounceMaterial == null)
+            {
+                noBounceMaterial = new PhysicMaterial("Player_NoBounce");
+                _bodyCollider.material = noBounceMaterial;
+            }
+
+            noBounceMaterial.bounciness = 0f;
+            noBounceMaterial.bounceCombine = PhysicMaterialCombine.Minimum;
+        }
 
         _yawAngle = transform.eulerAngles.y;
+        _initialYawAngle = _yawAngle;
+        _smoothedGroundNormal = Vector3.up;
+        _currentGroundClearance = desiredGroundClearance;
 
         // 경사 피치 정렬을 위해 Roll만 고정하고 Pitch는 허용
         RigidbodyConstraints constraints = _rb.constraints;
@@ -92,6 +123,7 @@ public class PlayerController : MonoBehaviour
         bool driftInput = autoDriftBySteer && Mathf.Abs(steerInput) >= autoDriftSteerThreshold;
 
         bool hasGround = TryGetGroundNormal(out Vector3 groundNormal);
+        ApplyInitialForwardSpeed();
         UpdateSteering(steerInput);
         ApplyVelocity(steerInput, driftInput, hasGround, groundNormal);
         ApplyRotation(steerInput, hasGround, groundNormal);
@@ -118,6 +150,13 @@ public class PlayerController : MonoBehaviour
         float yawDelta = _steerAngle * speedFactor * steerYawMultiplier * Time.fixedDeltaTime;
         if (Mathf.Abs(steerInput) < steeringInputDeadZone && Mathf.Abs(yawDelta) < 0.0001f) yawDelta = 0f;
         _yawAngle += yawDelta;
+
+        if (limitHeadingToForward)
+        {
+            float relativeYaw = Mathf.DeltaAngle(_initialYawAngle, _yawAngle);
+            relativeYaw = Mathf.Clamp(relativeYaw, -maxHeadingOffsetFromStart, maxHeadingOffsetFromStart);
+            _yawAngle = _initialYawAngle + relativeYaw;
+        }
     }
 
     private void ApplyVelocity(float steerInput, bool driftInput, bool hasGround, Vector3 groundNormal)
@@ -148,14 +187,35 @@ public class PlayerController : MonoBehaviour
         Vector3 desiredVelocity = (forwardDir * (localVelocity.z + driftBoost)) + (rightDir * localVelocity.x);
 
         float targetY = _rb.velocity.y;
+        float maxAllowedRiseSpeed = float.PositiveInfinity;
         if (hasGround)
         {
             targetY = Mathf.Lerp(_rb.velocity.y, desiredVelocity.y, verticalVelocityBlend * Time.fixedDeltaTime);
+
+            float clearanceError = desiredGroundClearance - _currentGroundClearance;
+            float clearanceCorrection = Mathf.Clamp(
+                clearanceError * clearanceAdjustStrength,
+                -groundStickForce,
+                maxClearanceRiseSpeed
+            );
+            targetY += clearanceCorrection;
+
+            if (suppressSeamBounce)
+            {
+                maxAllowedRiseSpeed = Mathf.Max(groundedMaxRiseSpeed, maxClearanceRiseSpeed, desiredVelocity.y + groundedRiseAllowance);
+                targetY = Mathf.Min(targetY, maxAllowedRiseSpeed);
+            }
             targetY = Mathf.Max(targetY, -groundStickForce);
         }
 
         Vector3 targetVelocity = new Vector3(desiredVelocity.x, targetY, desiredVelocity.z);
         _rb.velocity = Vector3.Lerp(_rb.velocity, targetVelocity, velocityBlend * Time.fixedDeltaTime);
+        if (hasGround && suppressSeamBounce && _rb.velocity.y > maxAllowedRiseSpeed)
+        {
+            Vector3 clampedVelocity = _rb.velocity;
+            clampedVelocity.y = maxAllowedRiseSpeed;
+            _rb.velocity = clampedVelocity;
+        }
     }
 
     private void ApplyRotation(float steerInput, bool hasGround, Vector3 groundNormal)
@@ -193,9 +253,42 @@ public class PlayerController : MonoBehaviour
             QueryTriggerInteraction.Ignore
         );
 
-        if (!hit) return false;
+        if (!hit)
+        {
+            _currentGroundClearance = groundCheckDistance;
+            return false;
+        }
 
-        groundNormal = hitInfo.normal;
+        float sideOffset = Mathf.Max(bounds.extents.x * 0.45f, 0.2f);
+        Vector3 side = transform.right * sideOffset;
+        Vector3 leftOrigin = origin - side;
+        Vector3 rightOrigin = origin + side;
+
+        Vector3 normalSum = hitInfo.normal;
+        int hitCount = 1;
+        float clearanceSum = Mathf.Max(hitInfo.distance - groundProbeUpOffset, 0f);
+        int clearanceSamples = 1;
+
+        if (Physics.Raycast(leftOrigin, Vector3.down, out RaycastHit leftHit, groundCheckDistance, groundLayerMask, QueryTriggerInteraction.Ignore))
+        {
+            normalSum += leftHit.normal;
+            hitCount++;
+            clearanceSum += Mathf.Max(leftHit.distance - groundProbeUpOffset, 0f);
+            clearanceSamples++;
+        }
+
+        if (Physics.Raycast(rightOrigin, Vector3.down, out RaycastHit rightHit, groundCheckDistance, groundLayerMask, QueryTriggerInteraction.Ignore))
+        {
+            normalSum += rightHit.normal;
+            hitCount++;
+            clearanceSum += Mathf.Max(rightHit.distance - groundProbeUpOffset, 0f);
+            clearanceSamples++;
+        }
+
+        _currentGroundClearance = clearanceSum / Mathf.Max(1, clearanceSamples);
+        Vector3 averagedNormal = (normalSum / hitCount).normalized;
+        _smoothedGroundNormal = Vector3.Slerp(_smoothedGroundNormal, averagedNormal, groundNormalLerp).normalized;
+        groundNormal = _smoothedGroundNormal;
         return true;
     }
 

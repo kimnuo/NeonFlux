@@ -32,10 +32,10 @@ public class GameManager : Singleton<GameManager>
         }
 
         // 보상형 광고 팝업 띄우기 (AdMobManager 연동)
-        if (AdMobManager.Instance != null)
-        {
-            AdMobManager.Instance.ShowRewardedAd();
-        }
+        //if (AdMobManager.Instance != null)
+        //{
+        //    AdMobManager.Instance.ShowRewardedAd();
+        //}
     }
 
     public void CompleteStage()
