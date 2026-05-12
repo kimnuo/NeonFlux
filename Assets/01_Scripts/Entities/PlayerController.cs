@@ -1,7 +1,12 @@
+using System;
+using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 public class PlayerController : MonoBehaviour
 {
+    private const float MaxHeadingAngleLimit = 65f;
+
     [Header("Drive (WheelCollider 스타일 파라미터)")]
     public float cruiseSpeed = 10f;
     public float maxForwardSpeed = 26f;
@@ -17,8 +22,11 @@ public class PlayerController : MonoBehaviour
     public float steerYawMultiplier = 1.9f;
     public float steerSpeedReference = 20f;
     public AnimationCurve steerBySpeed = new AnimationCurve(new Keyframe(0f, 1f), new Keyframe(1f, 0.35f));
+    public bool reduceForwardSpeedBySteer = true;
+    public AnimationCurve forwardSpeedBySteerAngle = new AnimationCurve(new Keyframe(0f, 1f), new Keyframe(1f, 0.72f));
+    [Min(1f)] public float steerDecelerationMultiplier = 1.35f;
     public bool limitHeadingToForward = true;
-    [Range(1f, 89f)] public float maxHeadingOffsetFromStart = 80f;
+    [Range(1f, MaxHeadingAngleLimit)] public float maxHeadingOffsetFromStart = MaxHeadingAngleLimit;
 
     [Header("Drift / Grip")]
     public bool autoDriftBySteer = true;
@@ -27,6 +35,22 @@ public class PlayerController : MonoBehaviour
     public float normalLateralGrip = 12f;
     public float driftLateralVelocity = 7f;
     public float driftForwardBoost = 2.4f;
+    public ParticleSystem driftSmokeParticle;
+    public ParticleSystem driftSmokeLeftParticle;
+    public ParticleSystem driftSmokeRightParticle;
+    public Vector3 driftSmokeLocalOffset = new Vector3(0f, 0.2f, -1.1f);
+    public float driftSmokeSideOffset = 0.45f;
+    public float driftSmokeInputMaxAbs = 10f;
+    public float driftSmokeStartInputAbs = 2f;
+    public float driftSmokeStopInputAbs = 2f;
+    public float driftSmokeHoldDuration = 1f;
+    public float driftSmokeMinForwardSpeed = 0f;
+    [Range(0f, 1f)] public float driftSmokeMinActiveIntensity = 0.22f;
+    public float driftSmokeSlipReference = 6f;
+    public float driftSmokeMaxEmission = 52f;
+    public float driftSmokeIntensityRiseSpeed = 5f;
+    public float driftSmokeIntensityFallSpeed = 3f;
+    public float driftSmokeOutsideBoost = 0.35f;
 
     [Header("Ground Follow")]
     public float groundCheckDistance = 1.6f;
@@ -61,6 +85,23 @@ public class PlayerController : MonoBehaviour
     public float minStepForwardSpeed = 3f;
     public LayerMask stepLayerMask = ~0;
 
+    [Header("Wheel Visuals")]
+    public bool autoFindWheelVisuals = true;
+    public float wheelVisualRadius = 0.36f;
+    public float wheelVisualSteerAngle = 28f;
+    public float wheelVisualSpinMultiplier = 1f;
+
+    [Header("Collider Height")]
+    [Range(0f, 1f)] public float colliderBottomFromWheelYRatio = 0.5f;
+    [Min(0f)] public float colliderBottomLift = 0.12f;
+
+    [Header("Digital Speedometer")]
+    public bool autoCreateDigitalSpeedometer = true;
+    public Vector2 digitalSpeedometerAnchoredPos = new Vector2(0f, -90f);
+    public Vector2 digitalSpeedometerSize = new Vector2(420f, 90f);
+    public int digitalSpeedometerFontSize = 52;
+    public string digitalSpeedometerUnit = " KM/H";
+
     private Rigidbody _rb;
     private Collider _bodyCollider;
     private float _yawAngle;
@@ -68,6 +109,23 @@ public class PlayerController : MonoBehaviour
     private float _initialYawAngle;
     private Vector3 _smoothedGroundNormal = Vector3.up;
     private float _currentGroundClearance;
+    private bool _isDriftSmokePlaying;
+    private float _driftSmokeIntensity;
+    private float _driftSmokeHoldTimer;
+    private float _driftSmokeHoldStartIntensity;
+    private Material _driftSmokeMaterial;
+    private readonly List<WheelVisualState> _wheelVisuals = new();
+    public float CurrentSpeedKmh => _rb != null ? _rb.velocity.magnitude * 3.6f : 0f;
+    private Text _digitalSpeedText;
+    private int _lastDisplayedSpeed = -1;
+
+    private sealed class WheelVisualState
+    {
+        public Transform Transform;
+        public Quaternion BaseLocalRotation;
+        public bool IsFrontWheel;
+        public float RollAngle;
+    }
 
     private void Awake()
     {
@@ -76,6 +134,12 @@ public class PlayerController : MonoBehaviour
         _rb.interpolation = RigidbodyInterpolation.Interpolate;
         _rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
         _rb.maxDepenetrationVelocity = maxDepenetrationSpeed;
+        colliderBottomFromWheelYRatio = Mathf.Clamp01(colliderBottomFromWheelYRatio);
+        colliderBottomLift = Mathf.Max(0f, colliderBottomLift);
+        digitalSpeedometerFontSize = Mathf.Max(12, digitalSpeedometerFontSize);
+        AdjustBodyColliderToWheelHeight();
+        InitializeWheelVisuals();
+        EnsureDigitalSpeedometer();
 
         if (_bodyCollider != null)
         {
@@ -92,8 +156,36 @@ public class PlayerController : MonoBehaviour
 
         _yawAngle = transform.eulerAngles.y;
         _initialYawAngle = _yawAngle;
+        maxHeadingOffsetFromStart = Mathf.Clamp(maxHeadingOffsetFromStart, 1f, MaxHeadingAngleLimit);
+        driftSmokeInputMaxAbs = Mathf.Max(1f, driftSmokeInputMaxAbs);
+        driftSmokeStartInputAbs = Mathf.Clamp(driftSmokeStartInputAbs, 0f, driftSmokeInputMaxAbs);
+        driftSmokeStopInputAbs = Mathf.Clamp(driftSmokeStopInputAbs, 0f, driftSmokeStartInputAbs);
+        steerDecelerationMultiplier = Mathf.Max(1f, steerDecelerationMultiplier);
+        driftSmokeHoldDuration = Mathf.Max(0f, driftSmokeHoldDuration);
+        driftSmokeMinForwardSpeed = Mathf.Max(0f, driftSmokeMinForwardSpeed);
+        driftSmokeMinActiveIntensity = Mathf.Clamp01(driftSmokeMinActiveIntensity);
+        driftSmokeSlipReference = Mathf.Max(0.1f, driftSmokeSlipReference);
+        driftSmokeMaxEmission = Mathf.Max(0f, driftSmokeMaxEmission);
+        driftSmokeIntensityRiseSpeed = Mathf.Max(0f, driftSmokeIntensityRiseSpeed);
+        driftSmokeIntensityFallSpeed = Mathf.Max(0f, driftSmokeIntensityFallSpeed);
+        driftSmokeOutsideBoost = Mathf.Clamp01(driftSmokeOutsideBoost);
+        driftSmokeSideOffset = Mathf.Max(0f, driftSmokeSideOffset);
         _smoothedGroundNormal = Vector3.up;
         _currentGroundClearance = desiredGroundClearance;
+
+        if (driftSmokeParticle == null && driftSmokeLeftParticle == null && driftSmokeRightParticle == null)
+        {
+            driftSmokeLeftParticle = CreateDefaultDriftSmokeParticle("DriftSmokeLeftParticle", new Vector3(-driftSmokeSideOffset, driftSmokeLocalOffset.y, driftSmokeLocalOffset.z));
+            driftSmokeRightParticle = CreateDefaultDriftSmokeParticle("DriftSmokeRightParticle", new Vector3(driftSmokeSideOffset, driftSmokeLocalOffset.y, driftSmokeLocalOffset.z));
+        }
+
+        InitializeSmokeEmitter(driftSmokeParticle);
+        InitializeSmokeEmitter(driftSmokeLeftParticle);
+        InitializeSmokeEmitter(driftSmokeRightParticle);
+        _isDriftSmokePlaying = false;
+        _driftSmokeIntensity = 0f;
+        _driftSmokeHoldTimer = 0f;
+        _driftSmokeHoldStartIntensity = 0f;
 
         // 경사 피치 정렬을 위해 Roll만 고정하고 Pitch는 허용
         RigidbodyConstraints constraints = _rb.constraints;
@@ -127,6 +219,9 @@ public class PlayerController : MonoBehaviour
         UpdateSteering(steerInput);
         ApplyVelocity(steerInput, driftInput, hasGround, groundNormal);
         ApplyRotation(steerInput, hasGround, groundNormal);
+        UpdateWheelVisuals(steerInput);
+        UpdateDigitalSpeedometer();
+        UpdateDriftSmoke(hasGround, steerInput);
         ApplyStepAssist();
     }
     private float GetSteerInput()
@@ -153,8 +248,9 @@ public class PlayerController : MonoBehaviour
 
         if (limitHeadingToForward)
         {
+            float headingLimit = Mathf.Min(maxHeadingOffsetFromStart, MaxHeadingAngleLimit);
             float relativeYaw = Mathf.DeltaAngle(_initialYawAngle, _yawAngle);
-            relativeYaw = Mathf.Clamp(relativeYaw, -maxHeadingOffsetFromStart, maxHeadingOffsetFromStart);
+            relativeYaw = Mathf.Clamp(relativeYaw, -headingLimit, headingLimit);
             _yawAngle = _initialYawAngle + relativeYaw;
         }
     }
@@ -174,8 +270,18 @@ public class PlayerController : MonoBehaviour
         Vector3 localVelocity = Quaternion.Inverse(yawRotation) * _rb.velocity;
 
         float targetForward = Mathf.Max(maxForwardSpeed, minimumAutoForwardSpeed);
+        if (reduceForwardSpeedBySteer)
+        {
+            float steer01 = Mathf.Clamp01(Mathf.Abs(_steerAngle) / Mathf.Max(maxSteerAngle, 0.01f));
+            float steerSpeedFactor = Mathf.Clamp(forwardSpeedBySteerAngle.Evaluate(steer01), 0.15f, 1f);
+            targetForward *= steerSpeedFactor;
+        }
+
         float autoAcceleration = Mathf.Max(acceleration, minimumAutoAcceleration);
-        localVelocity.z = Mathf.MoveTowards(localVelocity.z, targetForward, autoAcceleration * Time.fixedDeltaTime);
+        float forwardAdjustRate = localVelocity.z > targetForward
+            ? autoAcceleration * steerDecelerationMultiplier
+            : autoAcceleration;
+        localVelocity.z = Mathf.MoveTowards(localVelocity.z, targetForward, forwardAdjustRate * Time.fixedDeltaTime);
 
         float lateralGrip = driftInput ? driftLateralGrip : normalLateralGrip;
         float targetLateral = driftInput ? steerInput * driftLateralVelocity : 0f;
@@ -362,7 +468,7 @@ public class PlayerController : MonoBehaviour
 
         if (!hitLower) return;
         if (lowerHit.collider.attachedRigidbody == _rb) return;
-        if (lowerHit.collider.CompareTag("Obstacle")) return;
+        if (HasColliderTag(lowerHit.collider, "Obstacle")) return;
 
         bool hitUpper = Physics.Raycast(
             upperOrigin,
@@ -378,11 +484,439 @@ public class PlayerController : MonoBehaviour
         _rb.MovePosition(_rb.position + (Vector3.up * upStep));
     }
 
+    private void UpdateDriftSmoke(bool hasGround, float steerInput)
+    {
+        if (driftSmokeParticle == null && driftSmokeLeftParticle == null && driftSmokeRightParticle == null)
+        {
+            return;
+        }
+
+        if (driftSmokeParticle != null)
+        {
+            driftSmokeParticle.transform.localPosition = driftSmokeLocalOffset;
+        }
+        if (driftSmokeLeftParticle != null)
+        {
+            driftSmokeLeftParticle.transform.localPosition = new Vector3(-driftSmokeSideOffset, driftSmokeLocalOffset.y, driftSmokeLocalOffset.z);
+        }
+        if (driftSmokeRightParticle != null)
+        {
+            driftSmokeRightParticle.transform.localPosition = new Vector3(driftSmokeSideOffset, driftSmokeLocalOffset.y, driftSmokeLocalOffset.z);
+        }
+
+        float smokeInputAbs = Mathf.Abs(steerInput) * driftSmokeInputMaxAbs;
+        Quaternion yawRotation = Quaternion.Euler(0f, _yawAngle, 0f);
+        Vector3 localVelocity = Quaternion.Inverse(yawRotation) * _rb.velocity;
+        float forwardSpeed = Mathf.Max(localVelocity.z, 0f);
+        float lateralSpeed = Mathf.Abs(localVelocity.x);
+
+        bool steeringSmoke = _isDriftSmokePlaying
+            ? smokeInputAbs >= driftSmokeStopInputAbs
+            : smokeInputAbs >= driftSmokeStartInputAbs;
+
+        bool smokeGate = hasGround;
+        if (steeringSmoke && smokeGate)
+        {
+            _driftSmokeHoldTimer = driftSmokeHoldDuration;
+            _driftSmokeHoldStartIntensity = Mathf.Max(_driftSmokeIntensity, driftSmokeMinActiveIntensity);
+        }
+        else
+        {
+            _driftSmokeHoldTimer = Mathf.Max(0f, _driftSmokeHoldTimer - Time.fixedDeltaTime);
+        }
+
+        bool holdSmoke = !steeringSmoke && _driftSmokeHoldTimer > 0f;
+        bool shouldPlay = smokeGate && (steeringSmoke || holdSmoke);
+        float targetIntensity = 0f;
+        if (steeringSmoke && smokeGate)
+        {
+            float inputStart = Mathf.Max(driftSmokeStartInputAbs, 0.01f);
+            float input01 = Mathf.InverseLerp(inputStart, driftSmokeInputMaxAbs, smokeInputAbs);
+            float speed01 = Mathf.InverseLerp(driftSmokeMinForwardSpeed, Mathf.Max(driftSmokeMinForwardSpeed + 1f, maxForwardSpeed), forwardSpeed);
+            float slip01 = Mathf.InverseLerp(0.05f, driftSmokeSlipReference, lateralSpeed);
+            float speedFactor = Mathf.Lerp(0.55f, 1f, speed01);
+            float slipFactor = Mathf.Lerp(0.45f, 1f, slip01);
+            float baseIntensity = input01 * speedFactor * slipFactor;
+            targetIntensity = Mathf.Max(baseIntensity, driftSmokeMinActiveIntensity);
+        }
+        else if (holdSmoke && smokeGate)
+        {
+            float holdProgress = driftSmokeHoldDuration > 0f ? _driftSmokeHoldTimer / driftSmokeHoldDuration : 0f;
+            targetIntensity = Mathf.Lerp(0f, _driftSmokeHoldStartIntensity, holdProgress);
+        }
+
+        float smoothSpeed = targetIntensity > _driftSmokeIntensity ? driftSmokeIntensityRiseSpeed : driftSmokeIntensityFallSpeed;
+        _driftSmokeIntensity = Mathf.MoveTowards(_driftSmokeIntensity, targetIntensity, smoothSpeed * Time.fixedDeltaTime);
+
+        if (shouldPlay)
+        {
+            if (!_isDriftSmokePlaying)
+            {
+                PlaySmokeEmitter(driftSmokeParticle);
+                PlaySmokeEmitter(driftSmokeLeftParticle);
+                PlaySmokeEmitter(driftSmokeRightParticle);
+                _isDriftSmokePlaying = true;
+            }
+        }
+        else if (_isDriftSmokePlaying)
+        {
+            if (_driftSmokeIntensity <= 0.01f)
+            {
+                StopSmokeEmitter(driftSmokeParticle);
+                StopSmokeEmitter(driftSmokeLeftParticle);
+                StopSmokeEmitter(driftSmokeRightParticle);
+                _isDriftSmokePlaying = false;
+            }
+        }
+
+        float outsideBoost = 1f + (driftSmokeOutsideBoost * _driftSmokeIntensity);
+        float insideScale = Mathf.Clamp01(1f - (driftSmokeOutsideBoost * 0.7f * _driftSmokeIntensity));
+        float leftMultiplier = 1f;
+        float rightMultiplier = 1f;
+        if (steerInput > 0f)
+        {
+            leftMultiplier = outsideBoost;
+            rightMultiplier = insideScale;
+        }
+        else if (steerInput < 0f)
+        {
+            leftMultiplier = insideScale;
+            rightMultiplier = outsideBoost;
+        }
+
+        UpdateSmokeEmitterRate(driftSmokeParticle, driftSmokeMaxEmission * _driftSmokeIntensity);
+        UpdateSmokeEmitterRate(driftSmokeLeftParticle, driftSmokeMaxEmission * _driftSmokeIntensity * leftMultiplier);
+        UpdateSmokeEmitterRate(driftSmokeRightParticle, driftSmokeMaxEmission * _driftSmokeIntensity * rightMultiplier);
+    }
+
+    private ParticleSystem CreateDefaultDriftSmokeParticle(string objectName, Vector3 localOffset)
+    {
+        GameObject smokeObject = new GameObject(objectName);
+        smokeObject.transform.SetParent(transform, false);
+        smokeObject.transform.localPosition = localOffset;
+        smokeObject.transform.localRotation = Quaternion.Euler(-90f, 0f, 0f);
+
+        ParticleSystem smoke = smokeObject.AddComponent<ParticleSystem>();
+        var main = smoke.main;
+        main.loop = true;
+        main.playOnAwake = false;
+        main.duration = 1f;
+        main.startLifetime = 0.55f;
+        main.startSpeed = 1.2f;
+        main.startSize = 0.7f;
+        main.startColor = new Color(1f, 1f, 1f, 0.75f);
+        main.simulationSpace = ParticleSystemSimulationSpace.World;
+        main.maxParticles = 120;
+
+        var emission = smoke.emission;
+        emission.rateOverTime = 35f;
+
+        var shape = smoke.shape;
+        shape.shapeType = ParticleSystemShapeType.Cone;
+        shape.angle = 18f;
+        shape.radius = 0.22f;
+
+        var colorOverLifetime = smoke.colorOverLifetime;
+        colorOverLifetime.enabled = true;
+        Gradient colorGradient = new Gradient();
+        colorGradient.SetKeys(
+            new[]
+            {
+                new GradientColorKey(Color.white, 0f),
+                new GradientColorKey(Color.white, 1f)
+            },
+            new[]
+            {
+                new GradientAlphaKey(0.75f, 0f),
+                new GradientAlphaKey(0.25f, 0.55f),
+                new GradientAlphaKey(0f, 1f)
+            }
+        );
+        colorOverLifetime.color = colorGradient;
+
+        var sizeOverLifetime = smoke.sizeOverLifetime;
+        sizeOverLifetime.enabled = true;
+        sizeOverLifetime.size = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.EaseInOut(0f, 0.6f, 1f, 1.2f));
+
+        var renderer = smoke.GetComponent<ParticleSystemRenderer>();
+        renderer.renderMode = ParticleSystemRenderMode.Billboard;
+        Material smokeMaterial = GetOrCreateDriftSmokeMaterial();
+        if (smokeMaterial != null)
+        {
+            renderer.sharedMaterial = smokeMaterial;
+        }
+
+        smoke.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        return smoke;
+    }
+
+    private Material GetOrCreateDriftSmokeMaterial()
+    {
+        if (_driftSmokeMaterial != null)
+        {
+            return _driftSmokeMaterial;
+        }
+
+        Shader shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
+        if (shader == null) shader = Shader.Find("Particles/Standard Unlit");
+        if (shader == null) shader = Shader.Find("Legacy Shaders/Particles/Alpha Blended");
+        if (shader == null)
+        {
+            return null;
+        }
+
+        _driftSmokeMaterial = new Material(shader)
+        {
+            name = "PlayerDriftSmoke_White"
+        };
+
+        if (_driftSmokeMaterial.HasProperty("_BaseColor"))
+        {
+            _driftSmokeMaterial.SetColor("_BaseColor", Color.white);
+        }
+        if (_driftSmokeMaterial.HasProperty("_Color"))
+        {
+            _driftSmokeMaterial.SetColor("_Color", Color.white);
+        }
+
+        return _driftSmokeMaterial;
+    }
+
+    private void AdjustBodyColliderToWheelHeight()
+    {
+        if (_bodyCollider is not BoxCollider boxCollider)
+        {
+            return;
+        }
+
+        if (!TryGetAverageWheelLocalY(out float wheelY))
+        {
+            return;
+        }
+
+        float targetBottomY = (wheelY * colliderBottomFromWheelYRatio) + colliderBottomLift;
+        Vector3 center = boxCollider.center;
+        center.y = targetBottomY + (boxCollider.size.y * 0.5f);
+        boxCollider.center = center;
+    }
+
+    private bool TryGetAverageWheelLocalY(out float averageWheelY)
+    {
+        averageWheelY = 0f;
+        Transform[] transforms = GetComponentsInChildren<Transform>(true);
+        float ySum = 0f;
+        int wheelCount = 0;
+
+        for (int i = 0; i < transforms.Length; i++)
+        {
+            Transform current = transforms[i];
+            if (current == transform)
+            {
+                continue;
+            }
+
+            string name = current.name;
+            if (!name.Contains("wheel", StringComparison.OrdinalIgnoreCase) &&
+                !name.Contains("tire", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            ySum += current.localPosition.y;
+            wheelCount++;
+        }
+
+        if (wheelCount == 0)
+        {
+            return false;
+        }
+
+        averageWheelY = ySum / wheelCount;
+        return true;
+    }
+
+    private void InitializeSmokeEmitter(ParticleSystem smokeEmitter)
+    {
+        if (smokeEmitter == null)
+        {
+            return;
+        }
+
+        UpdateSmokeEmitterRate(smokeEmitter, 0f);
+        smokeEmitter.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+    }
+
+    private void InitializeWheelVisuals()
+    {
+        _wheelVisuals.Clear();
+        if (!autoFindWheelVisuals)
+        {
+            return;
+        }
+
+        Transform[] transforms = GetComponentsInChildren<Transform>(true);
+        for (int i = 0; i < transforms.Length; i++)
+        {
+            Transform current = transforms[i];
+            if (current == transform) continue;
+
+            string name = current.name;
+            bool isWheel = name.Contains("wheel", StringComparison.OrdinalIgnoreCase) ||
+                           name.Contains("tire", StringComparison.OrdinalIgnoreCase);
+            if (!isWheel) continue;
+
+            _wheelVisuals.Add(new WheelVisualState
+            {
+                Transform = current,
+                BaseLocalRotation = current.localRotation,
+                IsFrontWheel = current.localPosition.z > 0f,
+                RollAngle = 0f
+            });
+        }
+    }
+
+    private void UpdateWheelVisuals(float steerInput)
+    {
+        if (_wheelVisuals.Count == 0)
+        {
+            return;
+        }
+
+        float radius = Mathf.Max(0.05f, wheelVisualRadius);
+        float speedAlongForward = Vector3.Dot(_rb.velocity, transform.forward);
+        float degreesPerSecond = (speedAlongForward / (2f * Mathf.PI * radius)) * 360f * wheelVisualSpinMultiplier;
+        float steerYaw = steerInput * wheelVisualSteerAngle;
+
+        for (int i = 0; i < _wheelVisuals.Count; i++)
+        {
+            WheelVisualState wheel = _wheelVisuals[i];
+            if (wheel.Transform == null) continue;
+
+            wheel.RollAngle = Mathf.Repeat(wheel.RollAngle + (degreesPerSecond * Time.fixedDeltaTime), 360f);
+            float yawAngle = wheel.IsFrontWheel ? steerYaw : 0f;
+            wheel.Transform.localRotation = wheel.BaseLocalRotation * Quaternion.Euler(wheel.RollAngle, yawAngle, 0f);
+        }
+    }
+
+    private void EnsureDigitalSpeedometer()
+    {
+        if (!autoCreateDigitalSpeedometer)
+        {
+            return;
+        }
+
+        if (_digitalSpeedText != null)
+        {
+            return;
+        }
+
+        Canvas canvas = FindObjectOfType<Canvas>();
+        if (canvas == null)
+        {
+            GameObject canvasGo = new GameObject("HUD_Canvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            canvas = canvasGo.GetComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+
+            CanvasScaler scaler = canvasGo.GetComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1080f, 1920f);
+            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+            scaler.matchWidthOrHeight = 0f;
+        }
+
+        Text existing = canvas.GetComponentInChildren<Text>(true);
+        if (existing != null && existing.name == "DigitalSpeedometerText")
+        {
+            _digitalSpeedText = existing;
+            return;
+        }
+
+        GameObject speedGo = new GameObject("DigitalSpeedometerText", typeof(RectTransform), typeof(Text));
+        RectTransform rect = speedGo.GetComponent<RectTransform>();
+        rect.SetParent(canvas.transform, false);
+        rect.anchorMin = new Vector2(0.5f, 1f);
+        rect.anchorMax = new Vector2(0.5f, 1f);
+        rect.pivot = new Vector2(0.5f, 1f);
+        rect.anchoredPosition = digitalSpeedometerAnchoredPos;
+        rect.sizeDelta = digitalSpeedometerSize;
+
+        _digitalSpeedText = speedGo.GetComponent<Text>();
+        _digitalSpeedText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        _digitalSpeedText.alignment = TextAnchor.MiddleCenter;
+        _digitalSpeedText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        _digitalSpeedText.verticalOverflow = VerticalWrapMode.Overflow;
+        _digitalSpeedText.fontSize = digitalSpeedometerFontSize;
+        _digitalSpeedText.color = Color.white;
+        _digitalSpeedText.raycastTarget = false;
+        _digitalSpeedText.text = "0" + digitalSpeedometerUnit;
+    }
+
+    private void UpdateDigitalSpeedometer()
+    {
+        if (_digitalSpeedText == null)
+        {
+            return;
+        }
+
+        int speed = Mathf.RoundToInt(CurrentSpeedKmh);
+        if (speed == _lastDisplayedSpeed)
+        {
+            return;
+        }
+
+        _digitalSpeedText.text = speed + digitalSpeedometerUnit;
+        _lastDisplayedSpeed = speed;
+    }
+
+    private void PlaySmokeEmitter(ParticleSystem smokeEmitter)
+    {
+        if (smokeEmitter == null)
+        {
+            return;
+        }
+
+        if (!smokeEmitter.isPlaying)
+        {
+            smokeEmitter.Play();
+        }
+    }
+
+    private void StopSmokeEmitter(ParticleSystem smokeEmitter)
+    {
+        if (smokeEmitter == null)
+        {
+            return;
+        }
+
+        smokeEmitter.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+    }
+
+    private void UpdateSmokeEmitterRate(ParticleSystem smokeEmitter, float emissionRate)
+    {
+        if (smokeEmitter == null)
+        {
+            return;
+        }
+
+        var emission = smokeEmitter.emission;
+        emission.rateOverTime = emissionRate;
+    }
+
     private void OnTriggerEnter(Collider other)
     {
-        if (other.CompareTag("FinishLine"))
+        if (HasColliderTag(other, "FinishLine"))
             GameManager.Instance?.CompleteStage();
-        else if (other.CompareTag("Obstacle"))
+        else if (HasColliderTag(other, "Obstacle"))
             GameManager.Instance?.EndGame();
+    }
+
+    private static bool HasColliderTag(Collider target, string expectedTag)
+    {
+        if (target == null)
+        {
+            return false;
+        }
+
+        return string.Equals(target.tag, expectedTag, StringComparison.Ordinal);
     }
 }
