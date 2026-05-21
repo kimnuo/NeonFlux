@@ -196,6 +196,12 @@ public class PlayerController : MonoBehaviour
 
     private void Start()
     {
+        if (GameManager.Instance != null && GameManager.Instance.CurrentState != GameState.Playing)
+        {
+            _rb.velocity = Vector3.zero;
+            return;
+        }
+
         ApplyInitialForwardSpeed();
     }
 

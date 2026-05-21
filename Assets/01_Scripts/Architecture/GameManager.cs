@@ -9,13 +9,18 @@ public class GameManager : Singleton<GameManager>
     protected override void Awake()
     {
         base.Awake();
-        CurrentState = GameState.Playing;
+        CurrentState = GameState.MainMenu;
     }
 
     public void StartGame()
     {
         CurrentState = GameState.Playing;
         // 향후 UI 갱신 이벤트 호출 및 차량 움직임 활성화
+    }
+
+    public void GoToMainMenu()
+    {
+        CurrentState = GameState.MainMenu;
     }
 
     public void EndGame()
