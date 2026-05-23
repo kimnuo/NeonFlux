@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 public class PlayerController : MonoBehaviour
@@ -102,6 +103,42 @@ public class PlayerController : MonoBehaviour
     public int digitalSpeedometerFontSize = 52;
     public string digitalSpeedometerUnit = " KM/H";
 
+    [Header("Score")]
+    public bool enableScore = true;
+    [Min(0.1f)] public float scoreZDistanceStep = 5f;
+    [Min(0.1f)] public float scoreXDistanceStep = 1f;
+    public int scoreZPoints = 2;
+    public int scoreXPoints = 1;
+
+    [Header("Score UI")]
+    public bool autoCreateScoreUI = true;
+    public Vector2 scoreAnchoredPos = new Vector2(30f, -30f);
+    public Vector2 scoreSize = new Vector2(320f, 80f);
+    public int scoreFontSize = 44;
+    public Color scoreColor = Color.white;
+    public string scoreFormat = "점수: {0}";
+
+    [Header("Out of Bounds")]
+    public float outOfBoundsNoGroundTime = 0.8f;
+    public float outOfBoundsBelowStartY = -5f;
+    public bool autoCreateOutOfBoundsUI = true;
+    public Vector2 outOfBoundsPanelSize = new Vector2(760f, 420f);
+    public int outOfBoundsTitleFontSize = 52;
+    public int outOfBoundsScoreFontSize = 44;
+    public int outOfBoundsButtonFontSize = 40;
+    public Color outOfBoundsPanelColor = new Color(0f, 0f, 0f, 0.7f);
+    public Color outOfBoundsTextColor = Color.white;
+    public string outOfBoundsTitleText = "이탈";
+    public string outOfBoundsScoreFormat = "누적 점수: {0}";
+    public string outOfBoundsButtonText = "처음으로";
+
+    [Header("Airborne Clamp")]
+    public bool preventAirborneLaunch = true;
+    [Min(0f)] public float maxAirborneRiseSpeed = 0f;
+
+    [Header("Front Impact Lock")]
+    [Min(0f)] public float frontImpactPitchLockDuration = 0.2f;
+
     private Rigidbody _rb;
     private Collider _bodyCollider;
     private float _yawAngle;
@@ -118,6 +155,20 @@ public class PlayerController : MonoBehaviour
     public float CurrentSpeedKmh => _rb != null ? _rb.velocity.magnitude * 3.6f : 0f;
     private Text _digitalSpeedText;
     private int _lastDisplayedSpeed = -1;
+    private Text _scoreText;
+    private int _lastDisplayedScore = -1;
+    private int _score;
+    private float _scoreAccumZ;
+    private float _scoreAccumX;
+    private Vector3 _lastScorePosition;
+    private Vector3 _startPosition;
+    private Quaternion _startRotation;
+    private float _noGroundTimer;
+    private bool _isOutOfBounds;
+    private float _frontImpactPitchLockTimer;
+    private GameObject _outOfBoundsPanel;
+    private Text _outOfBoundsScoreText;
+    private Button _outOfBoundsHomeButton;
 
     private sealed class WheelVisualState
     {
@@ -137,9 +188,25 @@ public class PlayerController : MonoBehaviour
         colliderBottomFromWheelYRatio = Mathf.Clamp01(colliderBottomFromWheelYRatio);
         colliderBottomLift = Mathf.Max(0f, colliderBottomLift);
         digitalSpeedometerFontSize = Mathf.Max(12, digitalSpeedometerFontSize);
+        scoreFontSize = Mathf.Max(12, scoreFontSize);
+        outOfBoundsTitleFontSize = Mathf.Max(12, outOfBoundsTitleFontSize);
+        outOfBoundsScoreFontSize = Mathf.Max(12, outOfBoundsScoreFontSize);
+        outOfBoundsButtonFontSize = Mathf.Max(12, outOfBoundsButtonFontSize);
+        scoreZDistanceStep = Mathf.Max(0.1f, scoreZDistanceStep);
+        scoreXDistanceStep = Mathf.Max(0.1f, scoreXDistanceStep);
+        scoreZPoints = Mathf.Max(0, scoreZPoints);
+        scoreXPoints = Mathf.Max(0, scoreXPoints);
+        outOfBoundsNoGroundTime = Mathf.Max(0.05f, outOfBoundsNoGroundTime);
+        outOfBoundsBelowStartY = Mathf.Min(outOfBoundsBelowStartY, 0f);
+        frontImpactPitchLockDuration = Mathf.Max(0f, frontImpactPitchLockDuration);
+        _startPosition = transform.position;
+        _startRotation = transform.rotation;
         AdjustBodyColliderToWheelHeight();
         InitializeWheelVisuals();
         EnsureDigitalSpeedometer();
+        EnsureScoreText();
+        EnsureOutOfBoundsPanel();
+        ResetScoreTracking();
 
         if (_bodyCollider != null)
         {
@@ -192,6 +259,7 @@ public class PlayerController : MonoBehaviour
         constraints |= RigidbodyConstraints.FreezeRotationZ;
         constraints &= ~RigidbodyConstraints.FreezeRotationX;
         _rb.constraints = constraints;
+        SetGameplayUIVisible(GameManager.Instance == null || GameManager.Instance.CurrentState == GameState.Playing);
     }
 
     private void Start()
@@ -217,10 +285,18 @@ public class PlayerController : MonoBehaviour
     {
         if (GameManager.Instance != null && GameManager.Instance.CurrentState != GameState.Playing) return;
 
+        if (_frontImpactPitchLockTimer > 0f)
+        {
+            _frontImpactPitchLockTimer = Mathf.Max(0f, _frontImpactPitchLockTimer - Time.fixedDeltaTime);
+        }
+
         float steerInput = GetSteerInput();
         bool driftInput = autoDriftBySteer && Mathf.Abs(steerInput) >= autoDriftSteerThreshold;
 
         bool hasGround = TryGetGroundNormal(out Vector3 groundNormal);
+        UpdateScoreTracking();
+        UpdateOutOfBounds(hasGround);
+        if (_isOutOfBounds) return;
         ApplyInitialForwardSpeed();
         UpdateSteering(steerInput);
         ApplyVelocity(steerInput, driftInput, hasGround, groundNormal);
@@ -328,6 +404,19 @@ public class PlayerController : MonoBehaviour
             clampedVelocity.y = maxAllowedRiseSpeed;
             _rb.velocity = clampedVelocity;
         }
+        else if (!hasGround && preventAirborneLaunch && _rb.velocity.y > maxAirborneRiseSpeed)
+        {
+            Vector3 clampedVelocity = _rb.velocity;
+            clampedVelocity.y = maxAirborneRiseSpeed;
+            _rb.velocity = clampedVelocity;
+        }
+
+        if (_frontImpactPitchLockTimer > 0f && _rb.velocity.y > 0f)
+        {
+            Vector3 clampedVelocity = _rb.velocity;
+            clampedVelocity.y = 0f;
+            _rb.velocity = clampedVelocity;
+        }
     }
 
     private void ApplyRotation(float steerInput, bool hasGround, Vector3 groundNormal)
@@ -335,7 +424,7 @@ public class PlayerController : MonoBehaviour
         Quaternion yawRotation = Quaternion.Euler(0f, _yawAngle, 0f);
         Quaternion targetRotation = yawRotation;
 
-        if (alignPitchToRoad && hasGround && TryGetRoadPitchAngle(yawRotation, out float pitchAngle))
+        if (_frontImpactPitchLockTimer <= 0f && alignPitchToRoad && hasGround && TryGetRoadPitchAngle(yawRotation, out float pitchAngle))
         {
             targetRotation = yawRotation * Quaternion.Euler(pitchAngle, 0f, 0f);
         }
@@ -816,25 +905,15 @@ public class PlayerController : MonoBehaviour
             return;
         }
 
-        Canvas canvas = FindObjectOfType<Canvas>();
-        if (canvas == null)
+        Canvas canvas = GetOrCreateHudCanvas();
+        Text[] existingTexts = canvas.GetComponentsInChildren<Text>(true);
+        for (int i = 0; i < existingTexts.Length; i++)
         {
-            GameObject canvasGo = new GameObject("HUD_Canvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
-            canvas = canvasGo.GetComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-
-            CanvasScaler scaler = canvasGo.GetComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1080f, 1920f);
-            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-            scaler.matchWidthOrHeight = 0f;
-        }
-
-        Text existing = canvas.GetComponentInChildren<Text>(true);
-        if (existing != null && existing.name == "DigitalSpeedometerText")
-        {
-            _digitalSpeedText = existing;
-            return;
+            if (existingTexts[i].name == "DigitalSpeedometerText")
+            {
+                _digitalSpeedText = existingTexts[i];
+                return;
+            }
         }
 
         GameObject speedGo = new GameObject("DigitalSpeedometerText", typeof(RectTransform), typeof(Text));
@@ -872,6 +951,366 @@ public class PlayerController : MonoBehaviour
 
         _digitalSpeedText.text = speed + digitalSpeedometerUnit;
         _lastDisplayedSpeed = speed;
+    }
+
+    private Canvas GetOrCreateHudCanvas()
+    {
+        Canvas canvas = FindObjectOfType<Canvas>();
+        if (canvas != null)
+        {
+            return canvas;
+        }
+
+        GameObject canvasGo = new GameObject("HUD_Canvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+        canvas = canvasGo.GetComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+
+        CanvasScaler scaler = canvasGo.GetComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1080f, 1920f);
+        scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+        scaler.matchWidthOrHeight = 0f;
+
+        return canvas;
+    }
+
+    private void EnsureEventSystem()
+    {
+        if (FindObjectOfType<EventSystem>() != null)
+        {
+            return;
+        }
+
+        new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
+    }
+
+    private void EnsureScoreText()
+    {
+        if (!autoCreateScoreUI || _scoreText != null)
+        {
+            return;
+        }
+
+        Canvas canvas = GetOrCreateHudCanvas();
+        Text[] texts = canvas.GetComponentsInChildren<Text>(true);
+        for (int i = 0; i < texts.Length; i++)
+        {
+            if (texts[i].name == "ScoreText")
+            {
+                _scoreText = texts[i];
+                UpdateScoreText();
+                return;
+            }
+        }
+
+        GameObject scoreGo = new GameObject("ScoreText", typeof(RectTransform), typeof(Text));
+        RectTransform rect = scoreGo.GetComponent<RectTransform>();
+        rect.SetParent(canvas.transform, false);
+        rect.anchorMin = new Vector2(0f, 1f);
+        rect.anchorMax = new Vector2(0f, 1f);
+        rect.pivot = new Vector2(0f, 1f);
+        rect.anchoredPosition = scoreAnchoredPos;
+        rect.sizeDelta = scoreSize;
+
+        _scoreText = scoreGo.GetComponent<Text>();
+        _scoreText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        _scoreText.alignment = TextAnchor.UpperLeft;
+        _scoreText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        _scoreText.verticalOverflow = VerticalWrapMode.Overflow;
+        _scoreText.fontSize = scoreFontSize;
+        _scoreText.color = scoreColor;
+        _scoreText.raycastTarget = false;
+        UpdateScoreText();
+    }
+
+    private void UpdateScoreTracking()
+    {
+        if (!enableScore || _isOutOfBounds)
+        {
+            return;
+        }
+
+        Vector3 currentPosition = transform.position;
+        Vector3 delta = currentPosition - _lastScorePosition;
+        _lastScorePosition = currentPosition;
+
+        _scoreAccumZ += Mathf.Abs(delta.z);
+        _scoreAccumX += Mathf.Abs(delta.x);
+
+        int addScore = 0;
+        int zSteps = Mathf.FloorToInt(_scoreAccumZ / scoreZDistanceStep);
+        if (zSteps > 0)
+        {
+            addScore += zSteps * scoreZPoints;
+            _scoreAccumZ -= zSteps * scoreZDistanceStep;
+        }
+
+        int xSteps = Mathf.FloorToInt(_scoreAccumX / scoreXDistanceStep);
+        if (xSteps > 0)
+        {
+            addScore += xSteps * scoreXPoints;
+            _scoreAccumX -= xSteps * scoreXDistanceStep;
+        }
+
+        if (addScore != 0)
+        {
+            _score += addScore;
+            UpdateScoreText();
+        }
+    }
+
+    private void UpdateScoreText()
+    {
+        if (_scoreText == null)
+        {
+            return;
+        }
+
+        if (_score == _lastDisplayedScore)
+        {
+            return;
+        }
+
+        _scoreText.text = string.Format(scoreFormat, _score);
+        _lastDisplayedScore = _score;
+    }
+
+    private void ResetScoreTracking()
+    {
+        _score = 0;
+        _scoreAccumZ = 0f;
+        _scoreAccumX = 0f;
+        _lastScorePosition = transform.position;
+        _lastDisplayedScore = -1;
+        UpdateScoreText();
+    }
+
+    private void EnsureOutOfBoundsPanel()
+    {
+        if (!autoCreateOutOfBoundsUI || _outOfBoundsPanel != null)
+        {
+            return;
+        }
+
+        Canvas canvas = GetOrCreateHudCanvas();
+        RectTransform[] rects = canvas.GetComponentsInChildren<RectTransform>(true);
+        for (int i = 0; i < rects.Length; i++)
+        {
+            if (rects[i].name == "OutOfBoundsPanel")
+            {
+                _outOfBoundsPanel = rects[i].gameObject;
+                Text[] texts = _outOfBoundsPanel.GetComponentsInChildren<Text>(true);
+                for (int j = 0; j < texts.Length; j++)
+                {
+                    if (texts[j].name == "OutOfBoundsScoreText")
+                    {
+                        _outOfBoundsScoreText = texts[j];
+                        break;
+                    }
+                }
+
+                Button[] buttons = _outOfBoundsPanel.GetComponentsInChildren<Button>(true);
+                for (int j = 0; j < buttons.Length; j++)
+                {
+                    if (buttons[j].name == "OutOfBoundsHomeButton")
+                    {
+                        _outOfBoundsHomeButton = buttons[j];
+                        break;
+                    }
+                }
+                if (_outOfBoundsHomeButton != null)
+                {
+                    _outOfBoundsHomeButton.onClick.RemoveAllListeners();
+                    _outOfBoundsHomeButton.onClick.AddListener(ReturnToMainMenu);
+                }
+                _outOfBoundsPanel.SetActive(false);
+                return;
+            }
+        }
+
+        EnsureEventSystem();
+
+        GameObject panelGo = new GameObject("OutOfBoundsPanel", typeof(RectTransform), typeof(Image));
+        RectTransform panelRect = panelGo.GetComponent<RectTransform>();
+        panelRect.SetParent(canvas.transform, false);
+        panelRect.anchorMin = new Vector2(0.5f, 0.5f);
+        panelRect.anchorMax = new Vector2(0.5f, 0.5f);
+        panelRect.pivot = new Vector2(0.5f, 0.5f);
+        panelRect.sizeDelta = outOfBoundsPanelSize;
+
+        Image panelImage = panelGo.GetComponent<Image>();
+        panelImage.color = outOfBoundsPanelColor;
+        panelImage.raycastTarget = true;
+
+        GameObject titleGo = new GameObject("OutOfBoundsTitle", typeof(RectTransform), typeof(Text));
+        RectTransform titleRect = titleGo.GetComponent<RectTransform>();
+        titleRect.SetParent(panelRect, false);
+        titleRect.anchorMin = new Vector2(0.5f, 1f);
+        titleRect.anchorMax = new Vector2(0.5f, 1f);
+        titleRect.pivot = new Vector2(0.5f, 1f);
+        titleRect.anchoredPosition = new Vector2(0f, -30f);
+        titleRect.sizeDelta = new Vector2(outOfBoundsPanelSize.x - 80f, 90f);
+
+        Text titleText = titleGo.GetComponent<Text>();
+        titleText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        titleText.alignment = TextAnchor.MiddleCenter;
+        titleText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        titleText.verticalOverflow = VerticalWrapMode.Overflow;
+        titleText.fontSize = outOfBoundsTitleFontSize;
+        titleText.color = outOfBoundsTextColor;
+        titleText.raycastTarget = false;
+        titleText.text = outOfBoundsTitleText;
+
+        GameObject scoreGo = new GameObject("OutOfBoundsScoreText", typeof(RectTransform), typeof(Text));
+        RectTransform scoreRect = scoreGo.GetComponent<RectTransform>();
+        scoreRect.SetParent(panelRect, false);
+        scoreRect.anchorMin = new Vector2(0.5f, 0.5f);
+        scoreRect.anchorMax = new Vector2(0.5f, 0.5f);
+        scoreRect.pivot = new Vector2(0.5f, 0.5f);
+        scoreRect.anchoredPosition = new Vector2(0f, -10f);
+        scoreRect.sizeDelta = new Vector2(outOfBoundsPanelSize.x - 80f, 80f);
+
+        _outOfBoundsScoreText = scoreGo.GetComponent<Text>();
+        _outOfBoundsScoreText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        _outOfBoundsScoreText.alignment = TextAnchor.MiddleCenter;
+        _outOfBoundsScoreText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        _outOfBoundsScoreText.verticalOverflow = VerticalWrapMode.Overflow;
+        _outOfBoundsScoreText.fontSize = outOfBoundsScoreFontSize;
+        _outOfBoundsScoreText.color = outOfBoundsTextColor;
+        _outOfBoundsScoreText.raycastTarget = false;
+        _outOfBoundsScoreText.text = string.Format(outOfBoundsScoreFormat, _score);
+
+        GameObject buttonGo = new GameObject("OutOfBoundsHomeButton", typeof(RectTransform), typeof(Image), typeof(Button));
+        RectTransform buttonRect = buttonGo.GetComponent<RectTransform>();
+        buttonRect.SetParent(panelRect, false);
+        buttonRect.anchorMin = new Vector2(0.5f, 0f);
+        buttonRect.anchorMax = new Vector2(0.5f, 0f);
+        buttonRect.pivot = new Vector2(0.5f, 0f);
+        buttonRect.anchoredPosition = new Vector2(0f, 30f);
+        buttonRect.sizeDelta = new Vector2(260f, 80f);
+
+        Image buttonImage = buttonGo.GetComponent<Image>();
+        buttonImage.color = new Color(1f, 1f, 1f, 0.95f);
+        _outOfBoundsHomeButton = buttonGo.GetComponent<Button>();
+        _outOfBoundsHomeButton.targetGraphic = buttonImage;
+        _outOfBoundsHomeButton.onClick.AddListener(ReturnToMainMenu);
+
+        GameObject buttonTextGo = new GameObject("OutOfBoundsHomeButtonText", typeof(RectTransform), typeof(Text));
+        RectTransform buttonTextRect = buttonTextGo.GetComponent<RectTransform>();
+        buttonTextRect.SetParent(buttonRect, false);
+        buttonTextRect.anchorMin = Vector2.zero;
+        buttonTextRect.anchorMax = Vector2.one;
+        buttonTextRect.offsetMin = Vector2.zero;
+        buttonTextRect.offsetMax = Vector2.zero;
+
+        Text buttonText = buttonTextGo.GetComponent<Text>();
+        buttonText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        buttonText.alignment = TextAnchor.MiddleCenter;
+        buttonText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        buttonText.verticalOverflow = VerticalWrapMode.Overflow;
+        buttonText.fontSize = outOfBoundsButtonFontSize;
+        buttonText.color = Color.black;
+        buttonText.raycastTarget = false;
+        buttonText.text = outOfBoundsButtonText;
+
+        _outOfBoundsPanel = panelGo;
+        _outOfBoundsPanel.SetActive(false);
+    }
+
+    private void UpdateOutOfBounds(bool hasGround)
+    {
+        if (_isOutOfBounds)
+        {
+            return;
+        }
+
+        _noGroundTimer = hasGround ? 0f : _noGroundTimer + Time.fixedDeltaTime;
+        float minAllowedY = _startPosition.y + outOfBoundsBelowStartY;
+        if (_noGroundTimer >= outOfBoundsNoGroundTime || transform.position.y <= minAllowedY)
+        {
+            TriggerOutOfBounds();
+        }
+    }
+
+    private void TriggerOutOfBounds()
+    {
+        _isOutOfBounds = true;
+        _noGroundTimer = 0f;
+
+        if (_rb != null)
+        {
+            _rb.velocity = Vector3.zero;
+            _rb.angularVelocity = Vector3.zero;
+            _rb.isKinematic = true;
+        }
+
+        GameManager.Instance?.SetGameOver("플레이어가 코스를 이탈했습니다.");
+        ShowOutOfBoundsUI();
+    }
+
+    private void ShowOutOfBoundsUI()
+    {
+        if (_outOfBoundsPanel == null)
+        {
+            return;
+        }
+
+        if (_outOfBoundsScoreText != null)
+        {
+            _outOfBoundsScoreText.text = string.Format(outOfBoundsScoreFormat, _score);
+        }
+
+        _outOfBoundsPanel.SetActive(true);
+    }
+
+    private void ReturnToMainMenu()
+    {
+        ResetToStartState();
+
+        GameManager.Instance?.GoToMainMenu();
+    }
+
+    public void ResetToStartState()
+    {
+        if (_outOfBoundsPanel != null)
+        {
+            _outOfBoundsPanel.SetActive(false);
+        }
+
+        _isOutOfBounds = false;
+        _noGroundTimer = 0f;
+
+        if (_rb != null)
+        {
+            _rb.isKinematic = false;
+            _rb.velocity = Vector3.zero;
+            _rb.angularVelocity = Vector3.zero;
+        }
+
+        transform.position = _startPosition;
+        transform.rotation = _startRotation;
+        _yawAngle = _startRotation.eulerAngles.y;
+        _initialYawAngle = _yawAngle;
+        _frontImpactPitchLockTimer = 0f;
+        ResetScoreTracking();
+    }
+
+    public void SetGameplayUIVisible(bool visible)
+    {
+        if (_digitalSpeedText != null)
+        {
+            _digitalSpeedText.gameObject.SetActive(visible);
+        }
+
+        if (_scoreText != null)
+        {
+            _scoreText.gameObject.SetActive(visible);
+        }
+
+        if (_outOfBoundsPanel != null)
+        {
+            _outOfBoundsPanel.SetActive(visible && _isOutOfBounds);
+        }
     }
 
     private void PlaySmokeEmitter(ParticleSystem smokeEmitter)
@@ -914,6 +1353,89 @@ public class PlayerController : MonoBehaviour
             GameManager.Instance?.CompleteStage();
         else if (HasColliderTag(other, "Obstacle"))
             GameManager.Instance?.EndGame();
+    }
+
+    private void OnCollisionEnter(Collision collision)
+    {
+        SuppressBounceOnCollision(collision);
+    }
+
+    private void OnCollisionStay(Collision collision)
+    {
+        SuppressBounceOnCollision(collision);
+    }
+
+    private void SuppressBounceOnCollision(Collision collision)
+    {
+        if (_rb == null || collision == null || collision.contactCount == 0)
+        {
+            return;
+        }
+
+        Vector3 contactNormalSum = Vector3.zero;
+        for (int i = 0; i < collision.contactCount; i++)
+        {
+            contactNormalSum += collision.GetContact(i).normal;
+        }
+
+        Vector3 averageNormal = contactNormalSum.normalized;
+        Vector3 velocity = _rb.velocity;
+        Vector3 resolvedVelocity = Vector3.ProjectOnPlane(velocity, averageNormal);
+
+        if (averageNormal.y > 0.2f && resolvedVelocity.y > 0f)
+        {
+            resolvedVelocity.y = 0f;
+        }
+
+        if (resolvedVelocity.y > maxAirborneRiseSpeed && !collision.collider.isTrigger)
+        {
+            resolvedVelocity.y = maxAirborneRiseSpeed;
+        }
+
+        _rb.velocity = resolvedVelocity;
+
+        if (HasFrontImpact(collision))
+        {
+            _frontImpactPitchLockTimer = frontImpactPitchLockDuration;
+
+            Vector3 angularVelocity = _rb.angularVelocity;
+            if (angularVelocity.x > 0f)
+            {
+                angularVelocity.x = 0f;
+            }
+
+            if (angularVelocity.z != 0f)
+            {
+                angularVelocity.z = 0f;
+            }
+
+            _rb.angularVelocity = angularVelocity;
+        }
+    }
+
+    private bool HasFrontImpact(Collision collision)
+    {
+        if (collision == null)
+        {
+            return false;
+        }
+
+        if (HasColliderTag(collision.collider, "Obstacle"))
+        {
+            return true;
+        }
+
+        for (int i = 0; i < collision.contactCount; i++)
+        {
+            ContactPoint contact = collision.GetContact(i);
+            Vector3 localPoint = transform.InverseTransformPoint(contact.point);
+            if (localPoint.z > 0f && contact.normal.y < 0.6f)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool HasColliderTag(Collider target, string expectedTag)

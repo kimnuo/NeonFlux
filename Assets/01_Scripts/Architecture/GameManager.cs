@@ -4,23 +4,38 @@ public enum GameState { MainMenu, Playing, StageClear, GameOver }
 
 public class GameManager : Singleton<GameManager>
 {
+    [Header("Main Menu")]
+    [SerializeField] private string mainMenuCanvasName = "MainMenuCanvas";
+    [SerializeField] private string mainMenuRootName = "MenuRoot";
+
     public GameState CurrentState { get; private set; }
+
+    private GameObject _mainMenuRoot;
 
     protected override void Awake()
     {
         base.Awake();
         CurrentState = GameState.MainMenu;
+        CacheMainMenuRoot();
+        ApplyStateVisuals();
     }
 
     public void StartGame()
     {
+        PlayerController playerController = FindObjectOfType<PlayerController>();
+        if (playerController != null)
+        {
+            playerController.ResetToStartState();
+        }
+
         CurrentState = GameState.Playing;
-        // 향후 UI 갱신 이벤트 호출 및 차량 움직임 활성화
+        ApplyStateVisuals();
     }
 
     public void GoToMainMenu()
     {
         CurrentState = GameState.MainMenu;
+        ApplyStateVisuals();
     }
 
     public void EndGame()
@@ -30,17 +45,30 @@ public class GameManager : Singleton<GameManager>
         CurrentState = GameState.GameOver;
         Debug.Log("Game Over! 장애물에 충돌했습니다.");
 
-        // 디스크에 영구 데이터 보존
         if (SaveManager.Instance != null)
         {
             SaveManager.Instance.SaveData();
         }
 
-        // 보상형 광고 팝업 띄우기 (AdMobManager 연동)
-        //if (AdMobManager.Instance != null)
-        //{
-        //    AdMobManager.Instance.ShowRewardedAd();
-        //}
+        ApplyStateVisuals();
+    }
+
+    public void SetGameOver(string reason)
+    {
+        if (CurrentState != GameState.Playing) return;
+
+        CurrentState = GameState.GameOver;
+        if (!string.IsNullOrWhiteSpace(reason))
+        {
+            Debug.Log(reason);
+        }
+
+        if (SaveManager.Instance != null)
+        {
+            SaveManager.Instance.SaveData();
+        }
+
+        ApplyStateVisuals();
     }
 
     public void CompleteStage()
@@ -50,13 +78,46 @@ public class GameManager : Singleton<GameManager>
         CurrentState = GameState.StageClear;
         Debug.Log("Stage Cleared! 결승선을 통과했습니다.");
 
-        // 데이터 저장 로직
         if (SaveManager.Instance != null)
         {
             SaveManager.Instance.CurrentData.currentStageLevel++;
             SaveManager.Instance.SaveData();
         }
 
-        // 여기에 승리 UI를 띄우는 코드를 추가할 예정입니다.
+        ApplyStateVisuals();
+    }
+
+    private void CacheMainMenuRoot()
+    {
+        GameObject canvasObject = GameObject.Find(mainMenuCanvasName);
+        if (canvasObject == null)
+        {
+            return;
+        }
+
+        Transform menuRoot = canvasObject.transform.Find(mainMenuRootName);
+        if (menuRoot != null)
+        {
+            _mainMenuRoot = menuRoot.gameObject;
+        }
+    }
+
+    private void ApplyStateVisuals()
+    {
+        if (_mainMenuRoot == null)
+        {
+            CacheMainMenuRoot();
+        }
+
+        if (_mainMenuRoot != null)
+        {
+            _mainMenuRoot.SetActive(CurrentState == GameState.MainMenu);
+        }
+
+        PlayerController playerController = FindObjectOfType<PlayerController>();
+        if (playerController != null)
+        {
+            playerController.SetGameplayUIVisible(CurrentState == GameState.Playing);
+        }
     }
 }

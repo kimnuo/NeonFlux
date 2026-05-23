@@ -21,6 +21,9 @@ public class InputManager : Singleton<InputManager>
     [SerializeField] private float releaseDamping = 10f;
     [SerializeField] private float inputSnapThreshold = 0.03f;
 
+    [Header("조향 민첩도")]
+    [SerializeField] [Min(0.1f)] private float steeringResponseBoost = 1.35f;
+
     private bool _hasPointer;
     private Vector2 _lastPointerPosition;
 
@@ -41,6 +44,8 @@ public class InputManager : Singleton<InputManager>
 
     private void Update()
     {
+        float responseBoost = Mathf.Max(0.01f, steeringResponseBoost);
+
         if (useFixedSlideBar && fixedSlideBar != null)
         {
             IsHolding = fixedSlideBar.IsInteracting;
@@ -51,11 +56,11 @@ public class InputManager : Singleton<InputManager>
 
             if (!IsHolding)
             {
-                SlideDirection = Mathf.Lerp(SlideDirection, targetDirection, Time.deltaTime * releaseDamping);
+                SlideDirection = Mathf.Lerp(SlideDirection, targetDirection, Time.deltaTime * releaseDamping * responseBoost);
             }
             else
             {
-                SlideDirection = Mathf.Lerp(SlideDirection, targetDirection, Time.deltaTime * fixedSlideBarInputSmoothing);
+                SlideDirection = Mathf.Lerp(SlideDirection, targetDirection, Time.deltaTime * fixedSlideBarInputSmoothing * responseBoost);
             }
 
             if (Mathf.Abs(SlideDirection) < inputSnapThreshold) SlideDirection = 0f;
@@ -90,7 +95,7 @@ public class InputManager : Singleton<InputManager>
 
         if (!IsHolding)
         {
-            SlideDirection = Mathf.Lerp(SlideDirection, 0f, Time.deltaTime * releaseDamping);
+            SlideDirection = Mathf.Lerp(SlideDirection, 0f, Time.deltaTime * releaseDamping * responseBoost);
             if (Mathf.Abs(SlideDirection) < inputSnapThreshold) SlideDirection = 0f;
             return;
         }
@@ -102,7 +107,7 @@ public class InputManager : Singleton<InputManager>
             ? 0f
             : Mathf.Clamp(deltaX / fullSwipePixelsScaled, -1f, 1f);
 
-        SlideDirection = Mathf.Lerp(SlideDirection, rawSlide, Time.deltaTime * inputSmoothing);
+        SlideDirection = Mathf.Lerp(SlideDirection, rawSlide, Time.deltaTime * inputSmoothing * responseBoost);
         if (Mathf.Abs(SlideDirection) < inputSnapThreshold) SlideDirection = 0f;
     }
 
