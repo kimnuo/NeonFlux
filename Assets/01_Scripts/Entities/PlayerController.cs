@@ -132,6 +132,16 @@ public class PlayerController : MonoBehaviour
     public string outOfBoundsScoreFormat = "누적 점수: {0}";
     public string outOfBoundsButtonText = "처음으로";
 
+    [Header("Stage Clear UI")]
+    public bool autoCreateStageClearUI = true;
+    public Vector2 stageClearPanelSize = new Vector2(760f, 420f);
+    public int stageClearTitleFontSize = 52;
+    public int stageClearButtonFontSize = 40;
+    public Color stageClearPanelColor = new Color(0f, 0f, 0f, 0.7f);
+    public Color stageClearTextColor = Color.white;
+    public string stageClearTitleText = "스테이지 클리어";
+    public string stageClearButtonText = "다음 단계";
+
     [Header("Airborne Clamp")]
     public bool preventAirborneLaunch = true;
     [Min(0f)] public float maxAirborneRiseSpeed = 0f;
@@ -165,10 +175,13 @@ public class PlayerController : MonoBehaviour
     private Quaternion _startRotation;
     private float _noGroundTimer;
     private bool _isOutOfBounds;
+    private bool _isStageCleared;
     private float _frontImpactPitchLockTimer;
     private GameObject _outOfBoundsPanel;
     private Text _outOfBoundsScoreText;
     private Button _outOfBoundsHomeButton;
+    private GameObject _stageClearPanel;
+    private Button _stageClearNextButton;
 
     private sealed class WheelVisualState
     {
@@ -192,6 +205,8 @@ public class PlayerController : MonoBehaviour
         outOfBoundsTitleFontSize = Mathf.Max(12, outOfBoundsTitleFontSize);
         outOfBoundsScoreFontSize = Mathf.Max(12, outOfBoundsScoreFontSize);
         outOfBoundsButtonFontSize = Mathf.Max(12, outOfBoundsButtonFontSize);
+        stageClearTitleFontSize = Mathf.Max(12, stageClearTitleFontSize);
+        stageClearButtonFontSize = Mathf.Max(12, stageClearButtonFontSize);
         scoreZDistanceStep = Mathf.Max(0.1f, scoreZDistanceStep);
         scoreXDistanceStep = Mathf.Max(0.1f, scoreXDistanceStep);
         scoreZPoints = Mathf.Max(0, scoreZPoints);
@@ -1059,6 +1074,23 @@ public class PlayerController : MonoBehaviour
         }
     }
 
+    public void AddScore(int amount)
+    {
+        if (!enableScore || amount == 0)
+        {
+            return;
+        }
+
+        EnsureScoreText();
+        _score = Mathf.Max(0, _score + amount);
+        UpdateScoreText();
+
+        if (_outOfBoundsScoreText != null)
+        {
+            _outOfBoundsScoreText.text = string.Format(outOfBoundsScoreFormat, _score);
+        }
+    }
+
     private void UpdateScoreText()
     {
         if (_scoreText == null)
@@ -1217,6 +1249,122 @@ public class PlayerController : MonoBehaviour
         _outOfBoundsPanel.SetActive(false);
     }
 
+    private void EnsureStageClearPanel()
+    {
+        if (!autoCreateStageClearUI || _stageClearPanel != null)
+        {
+            return;
+        }
+
+        Canvas canvas = GetOrCreateHudCanvas();
+        RectTransform[] rects = canvas.GetComponentsInChildren<RectTransform>(true);
+        for (int i = 0; i < rects.Length; i++)
+        {
+            if (rects[i].name == "StageClearPanel")
+            {
+                _stageClearPanel = rects[i].gameObject;
+                Button[] buttons = _stageClearPanel.GetComponentsInChildren<Button>(true);
+                for (int j = 0; j < buttons.Length; j++)
+                {
+                    if (buttons[j].name == "StageClearNextButton")
+                    {
+                        _stageClearNextButton = buttons[j];
+                        break;
+                    }
+                }
+                if (_stageClearNextButton != null)
+                {
+                    _stageClearNextButton.onClick.RemoveAllListeners();
+                    _stageClearNextButton.onClick.AddListener(GoToNextStage);
+                }
+                _stageClearPanel.SetActive(false);
+                return;
+            }
+        }
+
+        EnsureEventSystem();
+
+        GameObject panelGo = new GameObject("StageClearPanel", typeof(RectTransform), typeof(Image));
+        RectTransform panelRect = panelGo.GetComponent<RectTransform>();
+        panelRect.SetParent(canvas.transform, false);
+        panelRect.anchorMin = new Vector2(0.5f, 0.5f);
+        panelRect.anchorMax = new Vector2(0.5f, 0.5f);
+        panelRect.pivot = new Vector2(0.5f, 0.5f);
+        panelRect.sizeDelta = stageClearPanelSize;
+
+        Image panelImage = panelGo.GetComponent<Image>();
+        panelImage.color = stageClearPanelColor;
+        panelImage.raycastTarget = true;
+
+        GameObject titleGo = new GameObject("StageClearTitle", typeof(RectTransform), typeof(Text));
+        RectTransform titleRect = titleGo.GetComponent<RectTransform>();
+        titleRect.SetParent(panelRect, false);
+        titleRect.anchorMin = new Vector2(0.5f, 1f);
+        titleRect.anchorMax = new Vector2(0.5f, 1f);
+        titleRect.pivot = new Vector2(0.5f, 1f);
+        titleRect.anchoredPosition = new Vector2(0f, -30f);
+        titleRect.sizeDelta = new Vector2(stageClearPanelSize.x - 80f, 90f);
+
+        Text titleText = titleGo.GetComponent<Text>();
+        titleText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        titleText.alignment = TextAnchor.MiddleCenter;
+        titleText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        titleText.verticalOverflow = VerticalWrapMode.Overflow;
+        titleText.fontSize = stageClearTitleFontSize;
+        titleText.color = stageClearTextColor;
+        titleText.raycastTarget = false;
+        titleText.text = stageClearTitleText;
+
+        GameObject buttonGo = new GameObject("StageClearNextButton", typeof(RectTransform), typeof(Image), typeof(Button));
+        RectTransform buttonRect = buttonGo.GetComponent<RectTransform>();
+        buttonRect.SetParent(panelRect, false);
+        buttonRect.anchorMin = new Vector2(0.5f, 0f);
+        buttonRect.anchorMax = new Vector2(0.5f, 0f);
+        buttonRect.pivot = new Vector2(0.5f, 0f);
+        buttonRect.anchoredPosition = new Vector2(0f, 30f);
+        buttonRect.sizeDelta = new Vector2(260f, 80f);
+
+        Image buttonImage = buttonGo.GetComponent<Image>();
+        buttonImage.color = new Color(1f, 1f, 1f, 0.95f);
+        _stageClearNextButton = buttonGo.GetComponent<Button>();
+        _stageClearNextButton.targetGraphic = buttonImage;
+        _stageClearNextButton.onClick.AddListener(GoToNextStage);
+
+        GameObject buttonTextGo = new GameObject("StageClearNextButtonText", typeof(RectTransform), typeof(Text));
+        RectTransform buttonTextRect = buttonTextGo.GetComponent<RectTransform>();
+        buttonTextRect.SetParent(buttonRect, false);
+        buttonTextRect.anchorMin = Vector2.zero;
+        buttonTextRect.anchorMax = Vector2.one;
+        buttonTextRect.offsetMin = Vector2.zero;
+        buttonTextRect.offsetMax = Vector2.zero;
+
+        Text buttonText = buttonTextGo.GetComponent<Text>();
+        buttonText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        buttonText.alignment = TextAnchor.MiddleCenter;
+        buttonText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        buttonText.verticalOverflow = VerticalWrapMode.Overflow;
+        buttonText.fontSize = stageClearButtonFontSize;
+        buttonText.color = Color.black;
+        buttonText.raycastTarget = false;
+        buttonText.text = stageClearButtonText;
+
+        _stageClearPanel = panelGo;
+        _stageClearPanel.SetActive(false);
+    }
+
+    public void SetStageClearUIVisible(bool visible)
+    {
+        if (visible)
+        {
+            EnsureStageClearPanel();
+        }
+
+        if (_stageClearPanel != null)
+        {
+            _stageClearPanel.SetActive(visible);
+        }
+    }
+
     private void UpdateOutOfBounds(bool hasGround)
     {
         if (_isOutOfBounds)
@@ -1248,6 +1396,22 @@ public class PlayerController : MonoBehaviour
         ShowOutOfBoundsUI();
     }
 
+    private void TriggerStageClear()
+    {
+        if (_isStageCleared)
+        {
+            return;
+        }
+
+        _isStageCleared = true;
+        if (_rb != null)
+        {
+            _rb.velocity = Vector3.zero;
+            _rb.angularVelocity = Vector3.zero;
+            _rb.isKinematic = true;
+        }
+    }
+
     private void ShowOutOfBoundsUI()
     {
         if (_outOfBoundsPanel == null)
@@ -1270,14 +1434,29 @@ public class PlayerController : MonoBehaviour
         GameManager.Instance?.GoToMainMenu();
     }
 
+    private void GoToNextStage()
+    {
+        if (_stageClearPanel != null)
+        {
+            _stageClearPanel.SetActive(false);
+        }
+
+        GameManager.Instance?.GoToNextStage();
+    }
+
     public void ResetToStartState()
     {
         if (_outOfBoundsPanel != null)
         {
             _outOfBoundsPanel.SetActive(false);
         }
+        if (_stageClearPanel != null)
+        {
+            _stageClearPanel.SetActive(false);
+        }
 
         _isOutOfBounds = false;
+        _isStageCleared = false;
         _noGroundTimer = 0f;
 
         if (_rb != null)
@@ -1350,7 +1529,10 @@ public class PlayerController : MonoBehaviour
     private void OnTriggerEnter(Collider other)
     {
         if (HasColliderTag(other, "FinishLine"))
+        {
+            TriggerStageClear();
             GameManager.Instance?.CompleteStage();
+        }
         else if (HasColliderTag(other, "Obstacle"))
             GameManager.Instance?.EndGame();
     }

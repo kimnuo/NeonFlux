@@ -8,6 +8,15 @@ public class GameManager : Singleton<GameManager>
     [SerializeField] private string mainMenuCanvasName = "MainMenuCanvas";
     [SerializeField] private string mainMenuRootName = "MenuRoot";
 
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR
+    [Header("Standalone Resolution")]
+    [SerializeField] private bool applyStandaloneResolution = true;
+    [SerializeField] private bool forceWindowed = true;
+    [SerializeField] private int standaloneTargetWidth = 1920;
+    [SerializeField] private int standaloneTargetHeight = 1080;
+    [SerializeField] private bool clampToDisplay = true;
+#endif
+
     public GameState CurrentState { get; private set; }
 
     private GameObject _mainMenuRoot;
@@ -15,10 +24,53 @@ public class GameManager : Singleton<GameManager>
     protected override void Awake()
     {
         base.Awake();
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR
+        ApplyStandaloneResolution();
+#endif
         CurrentState = GameState.MainMenu;
         CacheMainMenuRoot();
         ApplyStateVisuals();
     }
+
+#if UNITY_STANDALONE_WIN || UNITY_EDITOR
+    private void ApplyStandaloneResolution()
+    {
+        if (Application.isEditor)
+        {
+            return;
+        }
+
+        if (!applyStandaloneResolution)
+        {
+            return;
+        }
+
+        int targetWidth = Mathf.Max(1, standaloneTargetWidth);
+        int targetHeight = Mathf.Max(1, standaloneTargetHeight);
+        float targetAspect = targetWidth / (float)targetHeight;
+
+        if (clampToDisplay)
+        {
+            Resolution current = Screen.currentResolution;
+            int maxWidth = Mathf.Max(1, current.width);
+            int maxHeight = Mathf.Max(1, current.height);
+
+            int adjustedWidth = Mathf.Min(targetWidth, maxWidth);
+            int adjustedHeight = Mathf.RoundToInt(adjustedWidth / targetAspect);
+            if (adjustedHeight > maxHeight)
+            {
+                adjustedHeight = Mathf.Min(targetHeight, maxHeight);
+                adjustedWidth = Mathf.RoundToInt(adjustedHeight * targetAspect);
+            }
+
+            targetWidth = Mathf.Max(1, adjustedWidth);
+            targetHeight = Mathf.Max(1, adjustedHeight);
+        }
+
+        FullScreenMode mode = forceWindowed ? FullScreenMode.Windowed : Screen.fullScreenMode;
+        Screen.SetResolution(targetWidth, targetHeight, mode);
+    }
+#endif
 
     public void StartGame()
     {
@@ -87,6 +139,21 @@ public class GameManager : Singleton<GameManager>
         ApplyStateVisuals();
     }
 
+    public void GoToNextStage()
+    {
+        if (CurrentState != GameState.StageClear) return;
+
+        PlayerController playerController = FindObjectOfType<PlayerController>();
+        if (playerController != null)
+        {
+            playerController.ResetToStartState();
+        }
+
+        Debug.Log("임시 처리: 다음 스테이지 대신 현재 씬을 재시작합니다.");
+        CurrentState = GameState.Playing;
+        ApplyStateVisuals();
+    }
+
     private void CacheMainMenuRoot()
     {
         GameObject canvasObject = GameObject.Find(mainMenuCanvasName);
@@ -118,6 +185,7 @@ public class GameManager : Singleton<GameManager>
         if (playerController != null)
         {
             playerController.SetGameplayUIVisible(CurrentState == GameState.Playing);
+            playerController.SetStageClearUIVisible(CurrentState == GameState.StageClear);
         }
     }
 }

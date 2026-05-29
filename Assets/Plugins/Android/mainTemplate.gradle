@@ -1,13 +1,24 @@
 apply plugin: 'com.android.library'
 **APPLY_PLUGINS**
 
+configurations.all {
+    resolutionStrategy.eachDependency { details ->
+        if (details.requested.group == "org.jetbrains.kotlin") {
+            details.useVersion "1.9.24"
+        }
+        if (details.requested.group == "org.jetbrains.kotlinx" && details.requested.name.startsWith("kotlinx-coroutines-")) {
+            details.useVersion "1.7.3"
+        }
+    }
+}
+
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
 // Android Resolver Dependencies Start
-    implementation 'androidx.constraintlayout:constraintlayout:2.1.4' // Assets/GoogleMobileAds/Editor/GoogleMobileAdsDependencies.xml:12
-    implementation 'androidx.lifecycle:lifecycle-process:2.6.2' // Assets/GoogleMobileAds/Editor/GoogleMobileAdsDependencies.xml:17
-    implementation 'com.google.android.gms:play-services-ads:25.0.0' // Assets/GoogleMobileAds/Editor/GoogleMobileAdsDependencies.xml:7
-    implementation 'com.google.android.ump:user-messaging-platform:4.0.0' // Assets/GoogleMobileAds/Editor/GoogleUmpDependencies.xml:7
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4' // Assets/00_AsserStore/GoogleMobileAds/Editor/GoogleMobileAdsDependencies.xml:12
+    implementation 'androidx.lifecycle:lifecycle-process:2.6.2' // Assets/00_AsserStore/GoogleMobileAds/Editor/GoogleMobileAdsDependencies.xml:17
+    implementation 'com.google.android.gms:play-services-ads:25.0.0' // Assets/00_AsserStore/GoogleMobileAds/Editor/GoogleMobileAdsDependencies.xml:7
+    implementation 'com.google.android.ump:user-messaging-platform:4.0.0' // Assets/00_AsserStore/GoogleMobileAds/Editor/GoogleUmpDependencies.xml:7
 // Android Resolver Dependencies End
 **DEPS**}
 
