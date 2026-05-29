@@ -6,6 +6,12 @@ public class ScorePickup : MonoBehaviour
     [SerializeField] private bool disableAfterUse = true;
 
     private bool _used;
+    private bool _initialActive;
+
+    private void Awake()
+    {
+        _initialActive = gameObject.activeSelf;
+    }
 
     private void OnValidate()
     {
@@ -41,5 +47,11 @@ public class ScorePickup : MonoBehaviour
         {
             gameObject.SetActive(false);
         }
+    }
+
+    public void ResetForReplay()
+    {
+        _used = false;
+        gameObject.SetActive(_initialActive);
     }
 }

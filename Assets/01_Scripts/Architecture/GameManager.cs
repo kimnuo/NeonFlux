@@ -1,3 +1,4 @@
+using System.Reflection;
 using UnityEngine;
 
 public enum GameState { MainMenu, Playing, StageClear, GameOver }
@@ -74,6 +75,8 @@ public class GameManager : Singleton<GameManager>
 
     public void StartGame()
     {
+        ResetStageObjects();
+
         PlayerController playerController = FindObjectOfType<PlayerController>();
         if (playerController != null)
         {
@@ -86,6 +89,7 @@ public class GameManager : Singleton<GameManager>
 
     public void GoToMainMenu()
     {
+        ResetStageObjects();
         CurrentState = GameState.MainMenu;
         ApplyStateVisuals();
     }
@@ -143,6 +147,8 @@ public class GameManager : Singleton<GameManager>
     {
         if (CurrentState != GameState.StageClear) return;
 
+        ResetStageObjects();
+
         PlayerController playerController = FindObjectOfType<PlayerController>();
         if (playerController != null)
         {
@@ -186,6 +192,28 @@ public class GameManager : Singleton<GameManager>
         {
             playerController.SetGameplayUIVisible(CurrentState == GameState.Playing);
             playerController.SetStageClearUIVisible(CurrentState == GameState.StageClear);
+        }
+    }
+
+    private void ResetStageObjects()
+    {
+        MonoBehaviour[] behaviours = Resources.FindObjectsOfTypeAll<MonoBehaviour>();
+        for (int i = 0; i < behaviours.Length; i++)
+        {
+            MonoBehaviour behaviour = behaviours[i];
+            GameObject obj = behaviour.gameObject;
+            if (!obj.scene.IsValid() || !obj.scene.isLoaded)
+            {
+                continue;
+            }
+
+            MethodInfo method = behaviour.GetType().GetMethod(
+                "ResetForReplay",
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (method != null && method.GetParameters().Length == 0)
+            {
+                method.Invoke(behaviour, null);
+            }
         }
     }
 }

@@ -22,6 +22,16 @@ public class CameraFollow : MonoBehaviour
     // 모바일 환경 추천값: 10f ~ 15f
     public float smoothSpeed = 10f;
 
+    [Header("대상 재탐색 간격")]
+    public float targetSearchInterval = 0.5f;
+
+    private float _nextTargetSearchTime;
+
+    private void Awake()
+    {
+        targetSearchInterval = Mathf.Max(0.1f, targetSearchInterval);
+    }
+
     private void Start()
     {
         TryFindTarget();
@@ -41,6 +51,12 @@ public class CameraFollow : MonoBehaviour
         // 1. 추적 대상이 없으면 매 프레임 재탐색
         if (target == null)
         {
+            if (Time.unscaledTime < _nextTargetSearchTime)
+            {
+                return;
+            }
+
+            _nextTargetSearchTime = Time.unscaledTime + targetSearchInterval;
             TryFindTarget();
             return;
         }

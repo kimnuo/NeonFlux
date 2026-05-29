@@ -137,9 +137,11 @@ public class PlayerController : MonoBehaviour
     public Vector2 stageClearPanelSize = new Vector2(760f, 420f);
     public int stageClearTitleFontSize = 52;
     public int stageClearButtonFontSize = 40;
+    public int stageClearScoreFontSize = 44;
     public Color stageClearPanelColor = new Color(0f, 0f, 0f, 0.7f);
     public Color stageClearTextColor = Color.white;
     public string stageClearTitleText = "스테이지 클리어";
+    public string stageClearScoreFormat = "누적 점수: {0}";
     public string stageClearButtonText = "다음 단계";
 
     [Header("Airborne Clamp")]
@@ -173,6 +175,7 @@ public class PlayerController : MonoBehaviour
     private Vector3 _lastScorePosition;
     private Vector3 _startPosition;
     private Quaternion _startRotation;
+    private float _initialMaxForwardSpeed;
     private float _noGroundTimer;
     private bool _isOutOfBounds;
     private bool _isStageCleared;
@@ -182,6 +185,8 @@ public class PlayerController : MonoBehaviour
     private Button _outOfBoundsHomeButton;
     private GameObject _stageClearPanel;
     private Button _stageClearNextButton;
+    private Text _stageClearScoreText;
+    private static Font _cachedBuiltinFont;
 
     private sealed class WheelVisualState
     {
@@ -207,6 +212,7 @@ public class PlayerController : MonoBehaviour
         outOfBoundsButtonFontSize = Mathf.Max(12, outOfBoundsButtonFontSize);
         stageClearTitleFontSize = Mathf.Max(12, stageClearTitleFontSize);
         stageClearButtonFontSize = Mathf.Max(12, stageClearButtonFontSize);
+        stageClearScoreFontSize = Mathf.Max(12, stageClearScoreFontSize);
         scoreZDistanceStep = Mathf.Max(0.1f, scoreZDistanceStep);
         scoreXDistanceStep = Mathf.Max(0.1f, scoreXDistanceStep);
         scoreZPoints = Mathf.Max(0, scoreZPoints);
@@ -214,6 +220,7 @@ public class PlayerController : MonoBehaviour
         outOfBoundsNoGroundTime = Mathf.Max(0.05f, outOfBoundsNoGroundTime);
         outOfBoundsBelowStartY = Mathf.Min(outOfBoundsBelowStartY, 0f);
         frontImpactPitchLockDuration = Mathf.Max(0f, frontImpactPitchLockDuration);
+        _initialMaxForwardSpeed = maxForwardSpeed;
         _startPosition = transform.position;
         _startRotation = transform.rotation;
         AdjustBodyColliderToWheelHeight();
@@ -941,7 +948,7 @@ public class PlayerController : MonoBehaviour
         rect.sizeDelta = digitalSpeedometerSize;
 
         _digitalSpeedText = speedGo.GetComponent<Text>();
-        _digitalSpeedText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        _digitalSpeedText.font = GetBuiltinFont();
         _digitalSpeedText.alignment = TextAnchor.MiddleCenter;
         _digitalSpeedText.horizontalOverflow = HorizontalWrapMode.Overflow;
         _digitalSpeedText.verticalOverflow = VerticalWrapMode.Overflow;
@@ -966,6 +973,16 @@ public class PlayerController : MonoBehaviour
 
         _digitalSpeedText.text = speed + digitalSpeedometerUnit;
         _lastDisplayedSpeed = speed;
+    }
+
+    private static Font GetBuiltinFont()
+    {
+        if (_cachedBuiltinFont == null)
+        {
+            _cachedBuiltinFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        }
+
+        return _cachedBuiltinFont;
     }
 
     private Canvas GetOrCreateHudCanvas()
@@ -1028,7 +1045,7 @@ public class PlayerController : MonoBehaviour
         rect.sizeDelta = scoreSize;
 
         _scoreText = scoreGo.GetComponent<Text>();
-        _scoreText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        _scoreText.font = GetBuiltinFont();
         _scoreText.alignment = TextAnchor.UpperLeft;
         _scoreText.horizontalOverflow = HorizontalWrapMode.Overflow;
         _scoreText.verticalOverflow = VerticalWrapMode.Overflow;
@@ -1084,6 +1101,7 @@ public class PlayerController : MonoBehaviour
         EnsureScoreText();
         _score = Mathf.Max(0, _score + amount);
         UpdateScoreText();
+        UpdateStageClearScoreText();
 
         if (_outOfBoundsScoreText != null)
         {
@@ -1107,6 +1125,16 @@ public class PlayerController : MonoBehaviour
         _lastDisplayedScore = _score;
     }
 
+    private void UpdateStageClearScoreText()
+    {
+        if (_stageClearScoreText == null)
+        {
+            return;
+        }
+
+        _stageClearScoreText.text = string.Format(stageClearScoreFormat, _score);
+    }
+
     private void ResetScoreTracking()
     {
         _score = 0;
@@ -1115,6 +1143,7 @@ public class PlayerController : MonoBehaviour
         _lastScorePosition = transform.position;
         _lastDisplayedScore = -1;
         UpdateScoreText();
+        UpdateStageClearScoreText();
     }
 
     private void EnsureOutOfBoundsPanel()
@@ -1184,7 +1213,7 @@ public class PlayerController : MonoBehaviour
         titleRect.sizeDelta = new Vector2(outOfBoundsPanelSize.x - 80f, 90f);
 
         Text titleText = titleGo.GetComponent<Text>();
-        titleText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        titleText.font = GetBuiltinFont();
         titleText.alignment = TextAnchor.MiddleCenter;
         titleText.horizontalOverflow = HorizontalWrapMode.Overflow;
         titleText.verticalOverflow = VerticalWrapMode.Overflow;
@@ -1203,7 +1232,7 @@ public class PlayerController : MonoBehaviour
         scoreRect.sizeDelta = new Vector2(outOfBoundsPanelSize.x - 80f, 80f);
 
         _outOfBoundsScoreText = scoreGo.GetComponent<Text>();
-        _outOfBoundsScoreText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        _outOfBoundsScoreText.font = GetBuiltinFont();
         _outOfBoundsScoreText.alignment = TextAnchor.MiddleCenter;
         _outOfBoundsScoreText.horizontalOverflow = HorizontalWrapMode.Overflow;
         _outOfBoundsScoreText.verticalOverflow = VerticalWrapMode.Overflow;
@@ -1236,7 +1265,7 @@ public class PlayerController : MonoBehaviour
         buttonTextRect.offsetMax = Vector2.zero;
 
         Text buttonText = buttonTextGo.GetComponent<Text>();
-        buttonText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        buttonText.font = GetBuiltinFont();
         buttonText.alignment = TextAnchor.MiddleCenter;
         buttonText.horizontalOverflow = HorizontalWrapMode.Overflow;
         buttonText.verticalOverflow = VerticalWrapMode.Overflow;
@@ -1263,6 +1292,15 @@ public class PlayerController : MonoBehaviour
             if (rects[i].name == "StageClearPanel")
             {
                 _stageClearPanel = rects[i].gameObject;
+                Text[] texts = _stageClearPanel.GetComponentsInChildren<Text>(true);
+                for (int j = 0; j < texts.Length; j++)
+                {
+                    if (texts[j].name == "StageClearScoreText")
+                    {
+                        _stageClearScoreText = texts[j];
+                        break;
+                    }
+                }
                 Button[] buttons = _stageClearPanel.GetComponentsInChildren<Button>(true);
                 for (int j = 0; j < buttons.Length; j++)
                 {
@@ -1306,7 +1344,7 @@ public class PlayerController : MonoBehaviour
         titleRect.sizeDelta = new Vector2(stageClearPanelSize.x - 80f, 90f);
 
         Text titleText = titleGo.GetComponent<Text>();
-        titleText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        titleText.font = GetBuiltinFont();
         titleText.alignment = TextAnchor.MiddleCenter;
         titleText.horizontalOverflow = HorizontalWrapMode.Overflow;
         titleText.verticalOverflow = VerticalWrapMode.Overflow;
@@ -1314,6 +1352,25 @@ public class PlayerController : MonoBehaviour
         titleText.color = stageClearTextColor;
         titleText.raycastTarget = false;
         titleText.text = stageClearTitleText;
+
+        GameObject scoreGo = new GameObject("StageClearScoreText", typeof(RectTransform), typeof(Text));
+        RectTransform scoreRect = scoreGo.GetComponent<RectTransform>();
+        scoreRect.SetParent(panelRect, false);
+        scoreRect.anchorMin = new Vector2(0.5f, 0.5f);
+        scoreRect.anchorMax = new Vector2(0.5f, 0.5f);
+        scoreRect.pivot = new Vector2(0.5f, 0.5f);
+        scoreRect.anchoredPosition = new Vector2(0f, -10f);
+        scoreRect.sizeDelta = new Vector2(stageClearPanelSize.x - 80f, 80f);
+
+        _stageClearScoreText = scoreGo.GetComponent<Text>();
+        _stageClearScoreText.font = GetBuiltinFont();
+        _stageClearScoreText.alignment = TextAnchor.MiddleCenter;
+        _stageClearScoreText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        _stageClearScoreText.verticalOverflow = VerticalWrapMode.Overflow;
+        _stageClearScoreText.fontSize = stageClearScoreFontSize;
+        _stageClearScoreText.color = stageClearTextColor;
+        _stageClearScoreText.raycastTarget = false;
+        _stageClearScoreText.text = string.Format(stageClearScoreFormat, _score);
 
         GameObject buttonGo = new GameObject("StageClearNextButton", typeof(RectTransform), typeof(Image), typeof(Button));
         RectTransform buttonRect = buttonGo.GetComponent<RectTransform>();
@@ -1339,7 +1396,7 @@ public class PlayerController : MonoBehaviour
         buttonTextRect.offsetMax = Vector2.zero;
 
         Text buttonText = buttonTextGo.GetComponent<Text>();
-        buttonText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        buttonText.font = GetBuiltinFont();
         buttonText.alignment = TextAnchor.MiddleCenter;
         buttonText.horizontalOverflow = HorizontalWrapMode.Overflow;
         buttonText.verticalOverflow = VerticalWrapMode.Overflow;
@@ -1357,6 +1414,7 @@ public class PlayerController : MonoBehaviour
         if (visible)
         {
             EnsureStageClearPanel();
+            UpdateStageClearScoreText();
         }
 
         if (_stageClearPanel != null)
@@ -1466,6 +1524,7 @@ public class PlayerController : MonoBehaviour
             _rb.angularVelocity = Vector3.zero;
         }
 
+        maxForwardSpeed = _initialMaxForwardSpeed;
         transform.position = _startPosition;
         transform.rotation = _startRotation;
         _yawAngle = _startRotation.eulerAngles.y;
