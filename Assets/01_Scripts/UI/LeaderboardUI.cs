@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
@@ -66,6 +67,7 @@ public class LeaderboardUI : MonoBehaviour
         go.transform.SetParent(contentRoot, false);
         Text t = go.GetComponent<Text>();
         t.font = GetBuiltinFont();
+        t.fontSize = 30;
         t.text = text;
         t.alignment = TextAnchor.MiddleCenter;
         t.color = Color.white;
@@ -79,6 +81,7 @@ public class LeaderboardUI : MonoBehaviour
             Text t = go.GetComponentInChildren<Text>();
             if (t != null)
             {
+                t.fontSize = 30;
                 t.text = FormatLine(rank, score, stage, date, reason);
             }
             return;
@@ -88,6 +91,7 @@ public class LeaderboardUI : MonoBehaviour
         go2.transform.SetParent(contentRoot, false);
         Text tt = go2.GetComponent<Text>();
         tt.font = GetBuiltinFont();
+        tt.fontSize = 30;
         tt.text = FormatLine(rank, score, stage, date, reason);
         tt.alignment = TextAnchor.MiddleLeft;
         tt.color = Color.white;
@@ -95,7 +99,33 @@ public class LeaderboardUI : MonoBehaviour
 
     private string FormatLine(int rank, int score, int stage, string date, string reason)
     {
-        return string.Format("{0}. Score: {1}  Stage:{2}  {3}  {4}", rank, score, stage, date, reason);
+        string formattedDate = date;
+        if (!string.IsNullOrEmpty(date))
+        {
+            try
+            {
+                DateTime utcTime = DateTime.Parse(date, null, System.Globalization.DateTimeStyles.RoundtripKind);
+                DateTime kstTime = utcTime.ToLocalTime();
+                formattedDate = kstTime.ToString("MM/dd HH:mm");
+            }
+            catch
+            {
+                formattedDate = date;
+            }
+        }
+        
+        string reasonLabel = GetReasonLabel(reason);
+        return string.Format("{0}위  점수:{1}  Stage:{2}  {3}  {4}", rank, score, stage, formattedDate, reasonLabel);
+    }
+
+    private string GetReasonLabel(string reason)
+    {
+        if (string.IsNullOrEmpty(reason)) return "";
+        string lower = reason.ToLowerInvariant();
+        if (lower.Contains("obstacle") || lower.Contains("장애물")) return "장애물";
+        if (lower.Contains("outofbounds") || lower.Contains("이탈")) return "코스 이탈";
+        if (lower.Contains("clear") || lower.Contains("클리어")) return "클리어";
+        return reason;
     }
 
     private Font GetBuiltinFont()

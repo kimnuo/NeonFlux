@@ -65,6 +65,14 @@ public class GameManager : Singleton<GameManager>
 #if UNITY_STANDALONE_WIN || UNITY_EDITOR
         ApplyStandaloneResolution();
 #endif
+        // AutoUIBuilder를 찾아서 없으면 생성
+        AutoUIBuilder uiBuilder = FindObjectOfType<AutoUIBuilder>();
+        if (uiBuilder == null)
+        {
+            GameObject uiBuilderGO = new GameObject("AutoUIBuilder");
+            uiBuilder = uiBuilderGO.AddComponent<AutoUIBuilder>();
+        }
+
         CurrentState = GameState.MainMenu;
         CacheMainMenuRoot();
         ApplyStateVisuals();

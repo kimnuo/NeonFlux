@@ -715,6 +715,8 @@ public class PlayerController : MonoBehaviour
         smokeObject.transform.localRotation = Quaternion.Euler(-90f, 0f, 0f);
 
         ParticleSystem smoke = smokeObject.AddComponent<ParticleSystem>();
+        smoke.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+
         var main = smoke.main;
         main.loop = true;
         main.playOnAwake = false;
@@ -1406,6 +1408,40 @@ public class PlayerController : MonoBehaviour
         buttonText.raycastTarget = false;
         buttonText.text = stageClearButtonText;
 
+        // Leaderboard button
+        GameObject lbButtonGo = new GameObject("StageClearLeaderboardButton", typeof(RectTransform), typeof(Image), typeof(Button));
+        RectTransform lbButtonRect = lbButtonGo.GetComponent<RectTransform>();
+        lbButtonRect.SetParent(panelRect, false);
+        lbButtonRect.anchorMin = new Vector2(0.5f, 0f);
+        lbButtonRect.anchorMax = new Vector2(0.5f, 0f);
+        lbButtonRect.pivot = new Vector2(0.5f, 0f);
+        lbButtonRect.anchoredPosition = new Vector2(0f, -60f);
+        lbButtonRect.sizeDelta = new Vector2(260f, 60f);
+
+        Image lbButtonImage = lbButtonGo.GetComponent<Image>();
+        lbButtonImage.color = new Color(0.3f, 0.3f, 0.3f, 0.9f);
+        Button lbButton = lbButtonGo.GetComponent<Button>();
+        lbButton.targetGraphic = lbButtonImage;
+        lbButton.onClick.AddListener(OnStageClearLeaderboardClicked);
+
+        GameObject lbButtonTextGo = new GameObject("StageClearLeaderboardButtonText", typeof(RectTransform), typeof(Text));
+        RectTransform lbButtonTextRect = lbButtonTextGo.GetComponent<RectTransform>();
+        lbButtonTextRect.SetParent(lbButtonRect, false);
+        lbButtonTextRect.anchorMin = Vector2.zero;
+        lbButtonTextRect.anchorMax = Vector2.one;
+        lbButtonTextRect.offsetMin = Vector2.zero;
+        lbButtonTextRect.offsetMax = Vector2.zero;
+
+        Text lbButtonText = lbButtonTextGo.GetComponent<Text>();
+        lbButtonText.font = GetBuiltinFont();
+        lbButtonText.alignment = TextAnchor.MiddleCenter;
+        lbButtonText.horizontalOverflow = HorizontalWrapMode.Overflow;
+        lbButtonText.verticalOverflow = VerticalWrapMode.Overflow;
+        lbButtonText.fontSize = stageClearButtonFontSize - 4;
+        lbButtonText.color = Color.white;
+        lbButtonText.raycastTarget = false;
+        lbButtonText.text = "리더보드";
+
         _stageClearPanel = panelGo;
         _stageClearPanel.SetActive(false);
     }
@@ -1505,6 +1541,16 @@ public class PlayerController : MonoBehaviour
         GameManager.Instance?.GoToNextStage();
     }
 
+    private void OnStageClearLeaderboardClicked()
+    {
+        LeaderboardUI lbUI = FindObjectOfType<LeaderboardUI>();
+        if (lbUI != null)
+        {
+            lbUI.RefreshLeaderboard();
+            lbUI.Show();
+        }
+    }
+
     public void ResetToStartState()
     {
         if (_outOfBoundsPanel != null)
@@ -1594,10 +1640,20 @@ public class PlayerController : MonoBehaviour
         if (HasColliderTag(other, "FinishLine"))
         {
             TriggerStageClear();
-            GameManager.Instance?.CompleteStage();
+            if (GameManager.Instance != null)
+            {
+                GameManager.Instance.SetCurrentScore(_score);
+                GameManager.Instance.CompleteStage();
+            }
         }
         else if (HasColliderTag(other, "Obstacle"))
-            GameManager.Instance?.EndGame();
+        {
+            if (GameManager.Instance != null)
+            {
+                GameManager.Instance.SetCurrentScore(_score);
+                GameManager.Instance.EndGame();
+            }
+        }
     }
 
     private void OnCollisionEnter(Collision collision)
