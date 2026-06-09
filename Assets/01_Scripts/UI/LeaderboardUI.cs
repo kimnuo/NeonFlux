@@ -100,6 +100,6 @@ public class LeaderboardUI : MonoBehaviour
 
     private Font GetBuiltinFont()
     {
-        return Resources.GetBuiltinResource<Font>("Arial.ttf");
+        return Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
     }
 }

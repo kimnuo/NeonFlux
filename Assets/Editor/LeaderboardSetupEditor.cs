@@ -70,7 +70,7 @@ public static class LeaderboardSetupEditor
         textRT.offsetMin = Vector2.zero;
         textRT.offsetMax = Vector2.zero;
         var txt = textGO.GetComponent<Text>();
-        txt.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+        txt.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
         txt.fontSize = 20;
         txt.color = Color.white;
         txt.alignment = TextAnchor.MiddleLeft;
