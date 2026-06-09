@@ -84,7 +84,8 @@ public class SaveManager : Singleton<SaveManager>
 
 1. **Don't forget to pass runtime data to the save system**
    - Example bug: PlayerController tracked `_score` but never called `GameManager.SetCurrentScore()` before game over → scores were always 0 in leaderboard
-   
+   - Fix: Call `GameManager.Instance.SetCurrentScore(_score)` before `EndGame()` or `CompleteStage()`
+
 2. **Initialize collections in constructor or LoadData**
    - `JsonUtility.FromJson` returns `null` for missing lists, not empty lists
    - Always check: `if (CurrentData.history == null) CurrentData.history = new List<...>();`
@@ -92,6 +93,17 @@ public class SaveManager : Singleton<SaveManager>
 3. **UTC vs Local Time for dates**
    - Store as ISO format (`DateTime.UtcNow.ToString("s")`)
    - Convert to local time on display: `DateTime.Parse(date).ToLocalTime()`
+
+4. **ParticleSystem duration warning on Awake**
+   - When creating ParticleSystem at runtime in `Awake`, call `Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear)` **before** setting `main.duration`
+   - Unity 2022.3+ throws: "Setting the duration while system is still playing is not supported"
+   - Fix:
+     ```csharp
+     ParticleSystem smoke = gameObject.AddComponent<ParticleSystem>();
+     smoke.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear); // Call BEFORE setting main module
+     var main = smoke.main;
+     main.duration = 1f; // Now safe
+     ```
 
 ### 5. Verification Steps
 - Test on actual Android device (emulator may have different path behavior)

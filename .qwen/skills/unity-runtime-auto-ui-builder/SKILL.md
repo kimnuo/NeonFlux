@@ -169,6 +169,8 @@ private void WireButton(string name, System.Action action, GameObject parent)
 | **Deep Search** | Use `GetComponentsInChildren` not just `transform.Find` for nested hierarchies |
 | **Debug Logging** | Log every wire operation to diagnose missing connections quickly |
 | **Fallback** | If scene has partial UI, build only what's missing |
+| **DateTime import** | `LeaderboardUI.cs` needs `using System;` for `DateTime.Parse` — missing import causes CS0246/CS0103 |
+| **Button anchoring** | Check existing MenuRoot anchor style. If MenuRoot children use `anchorMin/Max = (0.5, 1)` (top-anchored), new buttons must use the same pattern with negative Y values, NOT `(0.5, 0.5)` (center-anchored) |
 
 ## Common Pitfalls
 
