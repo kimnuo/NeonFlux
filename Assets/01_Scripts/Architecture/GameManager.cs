@@ -219,11 +219,11 @@ public class GameManager : Singleton<GameManager>
     {
         // Hide any dedicated UIs first
         HideAllUI();
-n        if (_mainMenuRoot == null)
+        if (_mainMenuRoot == null)
         {
             CacheMainMenuRoot();
         }
-n        // MainMenu visibility
+        // MainMenu visibility
         if (CurrentState == GameState.MainMenu)
         {
             if (mainMenuUI != null)
@@ -231,14 +231,14 @@ public class GameManager : Singleton<GameManager>
             else if (_mainMenuRoot != null)
                 _mainMenuRoot.SetActive(true);
         }
-n        // Player HUD and stage UI
+        // Player HUD and stage UI
         PlayerController playerController = FindObjectOfType<PlayerController>();
         if (playerController != null)
         {
             playerController.SetGameplayUIVisible(CurrentState == GameState.Playing);
             playerController.SetStageClearUIVisible(CurrentState == GameState.StageClear);
         }
-n        // Game over handling: show GameOver UI and pass data if component supports it
+        // Game over handling: show GameOver UI and pass data if component supports it
         if (CurrentState == GameState.GameOver)
         {
             if (gameOverUI != null)
@@ -287,3 +287,4 @@ public class GameManager : Singleton<GameManager>
         }
     }
 }
+

@@ -305,6 +305,7 @@ public class PlayerController : MonoBehaviour
 
     private void FixedUpdate()
     {
+        Debug.Log($"[PlayerController] FixedUpdate start vel={_rb.velocity} isKinematic={_rb.isKinematic} pos={transform.position}");
         if (GameManager.Instance != null && GameManager.Instance.CurrentState != GameState.Playing) return;
 
         if (_frontImpactPitchLockTimer > 0f)
@@ -1445,6 +1446,7 @@ public class PlayerController : MonoBehaviour
 
         if (_rb != null)
         {
+            Debug.Log($"[PlayerController] TriggerOutOfBounds: zeroing velocity at pos={transform.position} vel={_rb.velocity}");
             _rb.velocity = Vector3.zero;
             _rb.angularVelocity = Vector3.zero;
             _rb.isKinematic = true;
@@ -1464,6 +1466,7 @@ public class PlayerController : MonoBehaviour
         _isStageCleared = true;
         if (_rb != null)
         {
+            Debug.Log($"[PlayerController] TriggerStageClear: zeroing velocity at pos={transform.position} vel={_rb.velocity}");
             _rb.velocity = Vector3.zero;
             _rb.angularVelocity = Vector3.zero;
             _rb.isKinematic = true;
@@ -1519,6 +1522,7 @@ public class PlayerController : MonoBehaviour
 
         if (_rb != null)
         {
+            Debug.Log($"[PlayerController] ResetToStartState: resetting rigidbody at pos={transform.position}");
             _rb.isKinematic = false;
             _rb.velocity = Vector3.zero;
             _rb.angularVelocity = Vector3.zero;
@@ -1633,6 +1637,7 @@ public class PlayerController : MonoBehaviour
             resolvedVelocity.y = maxAirborneRiseSpeed;
         }
 
+        Debug.Log($"[PlayerController] SuppressBounceOnCollision: resolvedVelocity={resolvedVelocity} from vel={_rb.velocity}");
         _rb.velocity = resolvedVelocity;
 
         if (HasFrontImpact(collision))
