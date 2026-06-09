@@ -2,7 +2,6 @@ pluginManagement {
     repositories {
         **ARTIFACTORYREPOSITORY**
         gradlePluginPortal()
-        google()
         mavenCentral()
     }
 }
@@ -14,15 +13,7 @@ dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
     repositories {
         **ARTIFACTORYREPOSITORY**
-        google()
         mavenCentral()
-// Android Resolver Repos Start
-        def unityProjectPath = $/file:///**DIR_UNITYPROJECT**/$.replace("\\", "/")
-        maven {
-            url "https://maven.google.com/" // Assets/00_AsserStore/GoogleMobileAds/Editor/GoogleMobileAdsDependencies.xml:7, Assets/00_AsserStore/GoogleMobileAds/Editor/GoogleMobileAdsDependencies.xml:12, Assets/00_AsserStore/GoogleMobileAds/Editor/GoogleMobileAdsDependencies.xml:17, Assets/00_AsserStore/GoogleMobileAds/Editor/GoogleUmpDependencies.xml:7
-        }
-        mavenLocal()
-// Android Resolver Repos End
         flatDir {
             dirs "${project(':unityLibrary').projectDir}/libs"
         }

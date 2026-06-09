@@ -20,7 +20,44 @@ public class GameManager : Singleton<GameManager>
 
     public GameState CurrentState { get; private set; }
 
+    [Header("UI References")]
+    [SerializeField] private GameObject gameOverUI;
+    [SerializeField] private GameObject mainMenuUI;
+
+    private int _currentGameScore;
+    private string _lastGameOverReason;
+
     private GameObject _mainMenuRoot;
+
+    public void SetCurrentScore(int score)
+    {
+        _currentGameScore = score;
+    }
+
+    public void RecordGameScore(string reason)
+    {
+        _lastGameOverReason = ExtractReasonKey(reason);
+        if (SaveManager.Instance != null)
+        {
+            SaveManager.Instance.RecordGameScore(_currentGameScore, _lastGameOverReason);
+        }
+    }
+
+    private string ExtractReasonKey(string reason)
+    {
+        if (string.IsNullOrWhiteSpace(reason)) return "unknown";
+        string lower = reason.ToLowerInvariant();
+        if (lower.Contains("장애물") || lower.Contains("obstacle")) return "obstacle";
+        if (lower.Contains("이탈") || lower.Contains("outofbounds") || lower.Contains("outofbounds") || lower.Contains("out of bounds")) return "outOfBounds";
+        if (lower.Contains("clear") || lower.Contains("클리어")) return "clear";
+        return "other";
+    }
+
+    private void HideAllUI()
+    {
+        if (mainMenuUI != null) mainMenuUI.SetActive(false);
+        if (gameOverUI != null) gameOverUI.SetActive(false);
+    }
 
     protected override void Awake()
     {
@@ -84,6 +121,7 @@ public class GameManager : Singleton<GameManager>
         }
 
         CurrentState = GameState.Playing;
+        _currentGameScore = 0;
         ApplyStateVisuals();
     }
 
@@ -103,7 +141,7 @@ public class GameManager : Singleton<GameManager>
 
         if (SaveManager.Instance != null)
         {
-            SaveManager.Instance.SaveData();
+            RecordGameScore("obstacle");
         }
 
         ApplyStateVisuals();
@@ -121,7 +159,7 @@ public class GameManager : Singleton<GameManager>
 
         if (SaveManager.Instance != null)
         {
-            SaveManager.Instance.SaveData();
+            RecordGameScore(reason);
         }
 
         ApplyStateVisuals();
@@ -136,6 +174,7 @@ public class GameManager : Singleton<GameManager>
 
         if (SaveManager.Instance != null)
         {
+            RecordGameScore("clear");
             SaveManager.Instance.CurrentData.currentStageLevel++;
             SaveManager.Instance.SaveData();
         }
@@ -157,6 +196,7 @@ public class GameManager : Singleton<GameManager>
 
         Debug.Log("임시 처리: 다음 스테이지 대신 현재 씬을 재시작합니다.");
         CurrentState = GameState.Playing;
+        _currentGameScore = 0;
         ApplyStateVisuals();
     }
 
@@ -177,21 +217,51 @@ public class GameManager : Singleton<GameManager>
 
     private void ApplyStateVisuals()
     {
-        if (_mainMenuRoot == null)
+        // Hide any dedicated UIs first
+        HideAllUI();
+n        if (_mainMenuRoot == null)
         {
             CacheMainMenuRoot();
         }
-
-        if (_mainMenuRoot != null)
+n        // MainMenu visibility
+        if (CurrentState == GameState.MainMenu)
         {
-            _mainMenuRoot.SetActive(CurrentState == GameState.MainMenu);
+            if (mainMenuUI != null)
+                mainMenuUI.SetActive(true);
+            else if (_mainMenuRoot != null)
+                _mainMenuRoot.SetActive(true);
         }
-
+n        // Player HUD and stage UI
         PlayerController playerController = FindObjectOfType<PlayerController>();
         if (playerController != null)
         {
             playerController.SetGameplayUIVisible(CurrentState == GameState.Playing);
             playerController.SetStageClearUIVisible(CurrentState == GameState.StageClear);
+        }
+n        // Game over handling: show GameOver UI and pass data if component supports it
+        if (CurrentState == GameState.GameOver)
+        {
+            if (gameOverUI != null)
+            {
+                // Try to invoke ShowGameOver(int score, string reason) if present                
+                var mb = gameOverUI.GetComponent<MonoBehaviour>();
+                if (mb != null)
+                {
+                    var method = mb.GetType().GetMethod("ShowGameOver", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+                    if (method != null)
+                    {
+                        try { method.Invoke(mb, new object[] { _currentGameScore, _lastGameOverReason }); } catch { gameOverUI.SetActive(true); }
+                    }
+                    else
+                    {
+                        gameOverUI.SetActive(true);
+                    }
+                }
+                else
+                {
+                    gameOverUI.SetActive(true);
+                }
+            }
         }
     }
 
