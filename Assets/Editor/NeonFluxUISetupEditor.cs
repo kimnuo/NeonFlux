@@ -46,11 +46,14 @@ public static class NeonFluxUISetupEditor
         // 3. Setup Game Over UI
         SetupGameOverUI(canvasT);
 
-        // 4. Wire GameManager
+        // 4. Setup Stage Clear UI
+        SetupStageClearUI(canvasT);
+
+        // 5. Wire GameManager
         WireGameManager(lbPanel);
 
         EditorSceneManager.MarkAllScenesDirty();
-        Debug.Log("NeonFlux UI setup complete: Main Menu + Leaderboard + Game Over");
+        Debug.Log("NeonFlux UI setup complete: Main Menu + Leaderboard + Game Over + Stage Clear");
     }
 
     private static void SetupMainMenu(Transform canvasT)
@@ -249,6 +252,57 @@ public static class NeonFluxUISetupEditor
         goUI.leaderboardButton = panel.transform.Find("LeaderboardButton")?.GetComponent<Button>();
     }
 
+    private static void SetupStageClearUI(Transform canvasT)
+    {
+        GameObject panel = GameObject.Find("StageClearPanel");
+        if (panel == null)
+        {
+            panel = new GameObject("StageClearPanel", typeof(RectTransform), typeof(Image));
+            panel.transform.SetParent(canvasT, false);
+            RectTransform rect = panel.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = new Vector2(700f, 700f);
+            rect.anchoredPosition = Vector2.zero;
+            panel.GetComponent<Image>().color = new Color(0f, 0.3f, 0f, 0.9f);
+
+            // Title
+            GameObject title = CreateTextObject("Title", panel.transform, new Vector2(0f, 250f), new Vector2(600f, 80f), 56, new Color(0f, 1f, 0.5f), TextAnchor.MiddleCenter, "STAGE CLEAR");
+
+            // Score text
+            GameObject scoreText = CreateTextObject("ScoreText", panel.transform, new Vector2(0f, 150f), new Vector2(500f, 60f), 36, Color.white, TextAnchor.MiddleCenter, "");
+
+            // High score text
+            GameObject highScoreText = CreateTextObject("HighScoreText", panel.transform, new Vector2(0f, 90f), new Vector2(500f, 50f), 28, Color.yellow, TextAnchor.MiddleCenter, "");
+
+            // Message text (positive)
+            CreateTextObject("MessageText", panel.transform, new Vector2(0f, 30f), new Vector2(500f, 50f), 24, new Color(0.6f, 1f, 0.6f), TextAnchor.MiddleCenter, "");
+
+            // Last score text
+            CreateTextObject("LastScoreText", panel.transform, new Vector2(0f, -40f), new Vector2(500f, 50f), 28, new Color(1f, 1f, 0.6f), TextAnchor.MiddleCenter, "");
+
+            // Buttons
+            CreateButton("NextStageButton", panel.transform, "다음 단계", new Vector2(0f, -120f), new Vector2(280f, 60f), new Color(0f, 0.6f, 0.6f, 1f));
+            CreateButton("MainMenuButton", panel.transform, "메인 메뉴", new Vector2(0f, -200f), new Vector2(280f, 60f), new Color(0.4f, 0.4f, 0.4f, 0.9f));
+            CreateButton("LeaderboardButton", panel.transform, "리더보드", new Vector2(0f, -290f), new Vector2(280f, 60f), new Color(0.3f, 0.3f, 0.3f, 0.9f));
+
+            panel.SetActive(false);
+        }
+
+        // StageClearUI component
+        StageClearUI scUI = panel.GetComponent<StageClearUI>();
+        if (scUI == null) scUI = panel.AddComponent<StageClearUI>();
+
+        scUI.panel = panel;
+        scUI.scoreText = panel.transform.Find("ScoreText")?.GetComponent<Text>();
+        scUI.highScoreText = panel.transform.Find("HighScoreText")?.GetComponent<Text>();
+        scUI.messageText = panel.transform.Find("MessageText")?.GetComponent<Text>();
+        scUI.lastScoreText = panel.transform.Find("LastScoreText")?.GetComponent<Text>();
+        scUI.nextStageButton = panel.transform.Find("NextStageButton")?.GetComponent<Button>();
+        scUI.mainMenuButton = panel.transform.Find("MainMenuButton")?.GetComponent<Button>();
+        scUI.leaderboardButton = panel.transform.Find("LeaderboardButton")?.GetComponent<Button>();
+    }
+
     private static void WireGameManager(GameObject lbPanel)
     {
         if (GameManager.Instance != null)
@@ -267,6 +321,14 @@ public static class NeonFluxUISetupEditor
             {
                 var goField = typeof(GameManager).GetField("gameOverUI", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
                 if (goField != null) goField.SetValue(GameManager.Instance, goPanel);
+            }
+
+            // Find stage clear panel
+            GameObject scPanel = GameObject.Find("StageClearPanel");
+            if (scPanel != null)
+            {
+                var scField = typeof(GameManager).GetField("stageClearUI", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+                if (scField != null) scField.SetValue(GameManager.Instance, scPanel);
             }
         }
 

@@ -14,14 +14,17 @@ public class AutoUIBuilder : MonoBehaviour
     [SerializeField] private bool buildMainMenu = true;
     [SerializeField] private bool buildLeaderboard = true;
     [SerializeField] private bool buildGameOver = true;
+    [SerializeField] private bool buildStageClear = true;
 
     private Canvas _canvas;
     private LeaderboardUI _leaderboardUI;
     private MainMenuUI _mainMenuUI;
     private GameOverUI _gameOverUI;
+    private StageClearUI _stageClearUI;
     private GameObject _mainMenuRoot;
     private GameObject _leaderboardPanel;
     private GameObject _gameOverPanel;
+    private GameObject _stageClearPanel;
     private Text _highScoreText;
 
     private void Awake()
@@ -41,6 +44,7 @@ public class AutoUIBuilder : MonoBehaviour
         if (buildMainMenu) BuildMainMenu();
         if (buildLeaderboard) BuildLeaderboard();
         if (buildGameOver) BuildGameOver();
+        if (buildStageClear) BuildStageClear();
 
         WireReferences();
         Debug.Log("[AutoUIBuilder] UI setup complete!");
@@ -219,6 +223,57 @@ public class AutoUIBuilder : MonoBehaviour
         if (_gameOverUI == null) _gameOverUI = _gameOverPanel.AddComponent<GameOverUI>();
     }
 
+    private void BuildStageClear()
+    {
+        _stageClearPanel = GameObject.Find("StageClearPanel");
+        bool needsSetup = _stageClearPanel == null;
+
+        if (needsSetup)
+        {
+            _stageClearPanel = new GameObject("StageClearPanel", typeof(RectTransform), typeof(Image));
+            _stageClearPanel.transform.SetParent(_canvas.transform, false);
+            RectTransform rect = _stageClearPanel.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0.5f, 0.5f);
+            rect.anchorMax = new Vector2(0.5f, 0.5f);
+            rect.sizeDelta = new Vector2(750f, 800f);
+            rect.anchoredPosition = Vector2.zero;
+            _stageClearPanel.GetComponent<Image>().color = new Color(0f, 0.3f, 0f, 0.92f);
+
+            // Title
+            CreateText("Title", _stageClearPanel.transform,
+                new Vector2(0f, 330f), new Vector2(650f, 90f), 60, new Color(0f, 1f, 0.5f), TextAnchor.MiddleCenter).text = "STAGE CLEAR";
+
+            // Score
+            CreateText("ScoreText", _stageClearPanel.transform,
+                new Vector2(0f, 210f), new Vector2(550f, 60f), 38, Color.white, TextAnchor.MiddleCenter);
+
+            // High Score
+            CreateText("HighScoreText", _stageClearPanel.transform,
+                new Vector2(0f, 140f), new Vector2(550f, 50f), 30, Color.yellow, TextAnchor.MiddleCenter);
+
+            // Message (positive)
+            CreateText("MessageText", _stageClearPanel.transform,
+                new Vector2(0f, 70f), new Vector2(550f, 50f), 26, new Color(0.6f, 1f, 0.6f), TextAnchor.MiddleCenter);
+
+            // Last Score Text
+            CreateText("LastScoreText", _stageClearPanel.transform,
+                new Vector2(0f, -10f), new Vector2(550f, 50f), 30, new Color(1f, 1f, 0.6f), TextAnchor.MiddleCenter);
+
+            // Buttons
+            CreateButton("NextStageButton", _stageClearPanel.transform,
+                "다음 단계", new Vector2(0f, -130f), new Vector2(300f, 65f), new Color(0f, 0.6f, 0.6f, 1f), 28);
+            CreateButton("MainMenuButton", _stageClearPanel.transform,
+                "메인 메뉴", new Vector2(0f, -220f), new Vector2(300f, 65f), new Color(0.4f, 0.4f, 0.4f, 0.9f), 28);
+            CreateButton("LeaderboardButton", _stageClearPanel.transform,
+                "리더보드", new Vector2(0f, -310f), new Vector2(300f, 65f), new Color(0.3f, 0.3f, 0.3f, 0.9f), 28);
+
+            _stageClearPanel.SetActive(false);
+        }
+
+        _stageClearUI = _stageClearPanel.GetComponent<StageClearUI>();
+        if (_stageClearUI == null) _stageClearUI = _stageClearPanel.AddComponent<StageClearUI>();
+    }
+
     private void WireReferences()
     {
         Debug.Log("[AutoUIBuilder] Wiring references...");
@@ -264,12 +319,23 @@ public class AutoUIBuilder : MonoBehaviour
             if (goField != null) goField.SetValue(GameManager.Instance, _gameOverPanel);
         }
 
+        // Stage clear panel -> GameManager
+        if (GameManager.Instance != null && _stageClearPanel != null)
+        {
+            var scField = typeof(GameManager).GetField("stageClearUI",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            if (scField != null) scField.SetValue(GameManager.Instance, _stageClearPanel);
+        }
+
         // Wire button clicks
         WireButton("StartButton", () => GameManager.Instance?.StartGame(), _mainMenuRoot);
         WireButton("LeaderboardButton", OnLeaderboardClicked, _mainMenuRoot);
         WireButton("CloseButton", () => { if (_leaderboardPanel != null) _leaderboardPanel.SetActive(false); }, _leaderboardPanel);
         WireButton("MainMenuButton", () => GameManager.Instance?.GoToMainMenu(), _gameOverPanel);
         WireButton("LeaderboardButton", OnLeaderboardClicked, _gameOverPanel);
+        WireButton("NextStageButton", () => GameManager.Instance?.GoToNextStage(), _stageClearPanel);
+        WireButton("MainMenuButton", () => GameManager.Instance?.GoToMainMenu(), _stageClearPanel);
+        WireButton("LeaderboardButton", OnLeaderboardClicked, _stageClearPanel);
 
         // GameOverUI wire
         if (_gameOverUI != null)
@@ -281,6 +347,19 @@ public class AutoUIBuilder : MonoBehaviour
             _gameOverUI.lastScoreText = FindChildText(_gameOverPanel, "LastScoreText");
             _gameOverUI.mainMenuButton = FindChildButton(_gameOverPanel, "MainMenuButton");
             _gameOverUI.leaderboardButton = FindChildButton(_gameOverPanel, "LeaderboardButton");
+        }
+
+        // StageClearUI wire
+        if (_stageClearUI != null)
+        {
+            _stageClearUI.panel = _stageClearPanel;
+            _stageClearUI.scoreText = FindChildText(_stageClearPanel, "ScoreText");
+            _stageClearUI.highScoreText = FindChildText(_stageClearPanel, "HighScoreText");
+            _stageClearUI.messageText = FindChildText(_stageClearPanel, "MessageText");
+            _stageClearUI.lastScoreText = FindChildText(_stageClearPanel, "LastScoreText");
+            _stageClearUI.nextStageButton = FindChildButton(_stageClearPanel, "NextStageButton");
+            _stageClearUI.mainMenuButton = FindChildButton(_stageClearPanel, "MainMenuButton");
+            _stageClearUI.leaderboardButton = FindChildButton(_stageClearPanel, "LeaderboardButton");
         }
 
         // Update high score display

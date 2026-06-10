@@ -22,10 +22,12 @@ public class GameManager : Singleton<GameManager>
 
     [Header("UI References")]
     [SerializeField] private GameObject gameOverUI;
+    [SerializeField] private GameObject stageClearUI;
     [SerializeField] private GameObject mainMenuUI;
 
     private int _currentGameScore;
     private string _lastGameOverReason;
+    private string _lastStageClearReason;
 
     private GameObject _mainMenuRoot;
 
@@ -57,6 +59,7 @@ public class GameManager : Singleton<GameManager>
     {
         if (mainMenuUI != null) mainMenuUI.SetActive(false);
         if (gameOverUI != null) gameOverUI.SetActive(false);
+        if (stageClearUI != null) stageClearUI.SetActive(false);
     }
 
     protected override void Awake()
@@ -178,6 +181,7 @@ public class GameManager : Singleton<GameManager>
         if (CurrentState != GameState.Playing) return;
 
         CurrentState = GameState.StageClear;
+        _lastStageClearReason = "clear";
         Debug.Log("Stage Cleared! 결승선을 통과했습니다.");
 
         if (SaveManager.Instance != null)
@@ -239,19 +243,18 @@ public class GameManager : Singleton<GameManager>
             else if (_mainMenuRoot != null)
                 _mainMenuRoot.SetActive(true);
         }
-        // Player HUD and stage UI
+        // Player HUD
         PlayerController playerController = FindObjectOfType<PlayerController>();
         if (playerController != null)
         {
             playerController.SetGameplayUIVisible(CurrentState == GameState.Playing);
-            playerController.SetStageClearUIVisible(CurrentState == GameState.StageClear);
         }
         // Game over handling: show GameOver UI and pass data if component supports it
         if (CurrentState == GameState.GameOver)
         {
             if (gameOverUI != null)
             {
-                // Try to invoke ShowGameOver(int score, string reason) if present                
+                // Try to invoke ShowGameOver(int score, string reason) if present
                 var mb = gameOverUI.GetComponent<MonoBehaviour>();
                 if (mb != null)
                 {
@@ -268,6 +271,31 @@ public class GameManager : Singleton<GameManager>
                 else
                 {
                     gameOverUI.SetActive(true);
+                }
+            }
+        }
+
+        // Stage clear handling: show StageClear UI and pass data if component supports it
+        if (CurrentState == GameState.StageClear)
+        {
+            if (stageClearUI != null)
+            {
+                var mb = stageClearUI.GetComponent<MonoBehaviour>();
+                if (mb != null)
+                {
+                    var method = mb.GetType().GetMethod("ShowStageClear", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+                    if (method != null)
+                    {
+                        try { method.Invoke(mb, new object[] { _currentGameScore, _lastStageClearReason }); } catch { stageClearUI.SetActive(true); }
+                    }
+                    else
+                    {
+                        stageClearUI.SetActive(true);
+                    }
+                }
+                else
+                {
+                    stageClearUI.SetActive(true);
                 }
             }
         }

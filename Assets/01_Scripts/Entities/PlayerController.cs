@@ -122,18 +122,6 @@ public class PlayerController : MonoBehaviour
     public float outOfBoundsNoGroundTime = 0.8f;
     public float outOfBoundsBelowStartY = -5f;
 
-    [Header("Stage Clear UI")]
-    public bool autoCreateStageClearUI = true;
-    public Vector2 stageClearPanelSize = new Vector2(760f, 420f);
-    public int stageClearTitleFontSize = 52;
-    public int stageClearButtonFontSize = 40;
-    public int stageClearScoreFontSize = 44;
-    public Color stageClearPanelColor = new Color(0f, 0f, 0f, 0.7f);
-    public Color stageClearTextColor = Color.white;
-    public string stageClearTitleText = "스테이지 클리어";
-    public string stageClearScoreFormat = "누적 점수: {0}";
-    public string stageClearButtonText = "다음 단계";
-
     [Header("Airborne Clamp")]
     public bool preventAirborneLaunch = true;
     [Min(0f)] public float maxAirborneRiseSpeed = 0f;
@@ -170,9 +158,6 @@ public class PlayerController : MonoBehaviour
     private bool _isOutOfBounds;
     private bool _isStageCleared;
     private float _frontImpactPitchLockTimer;
-    private GameObject _stageClearPanel;
-    private Button _stageClearNextButton;
-    private Text _stageClearScoreText;
     private static Font _cachedBuiltinFont;
 
     private sealed class WheelVisualState
@@ -194,9 +179,6 @@ public class PlayerController : MonoBehaviour
         colliderBottomLift = Mathf.Max(0f, colliderBottomLift);
         digitalSpeedometerFontSize = Mathf.Max(12, digitalSpeedometerFontSize);
         scoreFontSize = Mathf.Max(12, scoreFontSize);
-        stageClearTitleFontSize = Mathf.Max(12, stageClearTitleFontSize);
-        stageClearButtonFontSize = Mathf.Max(12, stageClearButtonFontSize);
-        stageClearScoreFontSize = Mathf.Max(12, stageClearScoreFontSize);
         scoreZDistanceStep = Mathf.Max(0.1f, scoreZDistanceStep);
         scoreXDistanceStep = Mathf.Max(0.1f, scoreXDistanceStep);
         scoreZPoints = Mathf.Max(0, scoreZPoints);
@@ -1086,7 +1068,6 @@ public class PlayerController : MonoBehaviour
         EnsureScoreText();
         _score = Mathf.Max(0, _score + amount);
         UpdateScoreText();
-        UpdateStageClearScoreText();
         SyncScoreToGameManager();
     }
 
@@ -1106,16 +1087,6 @@ public class PlayerController : MonoBehaviour
         _lastDisplayedScore = _score;
     }
 
-    private void UpdateStageClearScoreText()
-    {
-        if (_stageClearScoreText == null)
-        {
-            return;
-        }
-
-        _stageClearScoreText.text = string.Format(stageClearScoreFormat, _score);
-    }
-
     private void ResetScoreTracking()
     {
         _score = 0;
@@ -1124,7 +1095,6 @@ public class PlayerController : MonoBehaviour
         _lastScorePosition = transform.position;
         _lastDisplayedScore = -1;
         UpdateScoreText();
-        UpdateStageClearScoreText();
         SyncScoreToGameManager();
     }
 
@@ -1136,182 +1106,20 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-    private void EnsureStageClearPanel()
+    private void TriggerStageClear()
     {
-        if (!autoCreateStageClearUI || _stageClearPanel != null)
+        if (_isStageCleared)
         {
             return;
         }
 
-        Canvas canvas = GetOrCreateHudCanvas();
-        RectTransform[] rects = canvas.GetComponentsInChildren<RectTransform>(true);
-        for (int i = 0; i < rects.Length; i++)
+        _isStageCleared = true;
+        if (_rb != null)
         {
-            if (rects[i].name == "StageClearPanel")
-            {
-                _stageClearPanel = rects[i].gameObject;
-                Text[] texts = _stageClearPanel.GetComponentsInChildren<Text>(true);
-                for (int j = 0; j < texts.Length; j++)
-                {
-                    if (texts[j].name == "StageClearScoreText")
-                    {
-                        _stageClearScoreText = texts[j];
-                        break;
-                    }
-                }
-                Button[] buttons = _stageClearPanel.GetComponentsInChildren<Button>(true);
-                for (int j = 0; j < buttons.Length; j++)
-                {
-                    if (buttons[j].name == "StageClearNextButton")
-                    {
-                        _stageClearNextButton = buttons[j];
-                        break;
-                    }
-                }
-                if (_stageClearNextButton != null)
-                {
-                    _stageClearNextButton.onClick.RemoveAllListeners();
-                    _stageClearNextButton.onClick.AddListener(GoToNextStage);
-                }
-                _stageClearPanel.SetActive(false);
-                return;
-            }
-        }
-
-        EnsureEventSystem();
-
-        GameObject panelGo = new GameObject("StageClearPanel", typeof(RectTransform), typeof(Image));
-        RectTransform panelRect = panelGo.GetComponent<RectTransform>();
-        panelRect.SetParent(canvas.transform, false);
-        panelRect.anchorMin = new Vector2(0.5f, 0.5f);
-        panelRect.anchorMax = new Vector2(0.5f, 0.5f);
-        panelRect.pivot = new Vector2(0.5f, 0.5f);
-        panelRect.sizeDelta = stageClearPanelSize;
-
-        Image panelImage = panelGo.GetComponent<Image>();
-        panelImage.color = stageClearPanelColor;
-        panelImage.raycastTarget = true;
-
-        GameObject titleGo = new GameObject("StageClearTitle", typeof(RectTransform), typeof(Text));
-        RectTransform titleRect = titleGo.GetComponent<RectTransform>();
-        titleRect.SetParent(panelRect, false);
-        titleRect.anchorMin = new Vector2(0.5f, 1f);
-        titleRect.anchorMax = new Vector2(0.5f, 1f);
-        titleRect.pivot = new Vector2(0.5f, 1f);
-        titleRect.anchoredPosition = new Vector2(0f, -30f);
-        titleRect.sizeDelta = new Vector2(stageClearPanelSize.x - 80f, 90f);
-
-        Text titleText = titleGo.GetComponent<Text>();
-        titleText.font = GetBuiltinFont();
-        titleText.alignment = TextAnchor.MiddleCenter;
-        titleText.horizontalOverflow = HorizontalWrapMode.Overflow;
-        titleText.verticalOverflow = VerticalWrapMode.Overflow;
-        titleText.fontSize = stageClearTitleFontSize;
-        titleText.color = stageClearTextColor;
-        titleText.raycastTarget = false;
-        titleText.text = stageClearTitleText;
-
-        GameObject scoreGo = new GameObject("StageClearScoreText", typeof(RectTransform), typeof(Text));
-        RectTransform scoreRect = scoreGo.GetComponent<RectTransform>();
-        scoreRect.SetParent(panelRect, false);
-        scoreRect.anchorMin = new Vector2(0.5f, 0.5f);
-        scoreRect.anchorMax = new Vector2(0.5f, 0.5f);
-        scoreRect.pivot = new Vector2(0.5f, 0.5f);
-        scoreRect.anchoredPosition = new Vector2(0f, -10f);
-        scoreRect.sizeDelta = new Vector2(stageClearPanelSize.x - 80f, 80f);
-
-        _stageClearScoreText = scoreGo.GetComponent<Text>();
-        _stageClearScoreText.font = GetBuiltinFont();
-        _stageClearScoreText.alignment = TextAnchor.MiddleCenter;
-        _stageClearScoreText.horizontalOverflow = HorizontalWrapMode.Overflow;
-        _stageClearScoreText.verticalOverflow = VerticalWrapMode.Overflow;
-        _stageClearScoreText.fontSize = stageClearScoreFontSize;
-        _stageClearScoreText.color = stageClearTextColor;
-        _stageClearScoreText.raycastTarget = false;
-        _stageClearScoreText.text = string.Format(stageClearScoreFormat, _score);
-
-        GameObject buttonGo = new GameObject("StageClearNextButton", typeof(RectTransform), typeof(Image), typeof(Button));
-        RectTransform buttonRect = buttonGo.GetComponent<RectTransform>();
-        buttonRect.SetParent(panelRect, false);
-        buttonRect.anchorMin = new Vector2(0.5f, 0f);
-        buttonRect.anchorMax = new Vector2(0.5f, 0f);
-        buttonRect.pivot = new Vector2(0.5f, 0f);
-        buttonRect.anchoredPosition = new Vector2(0f, 30f);
-        buttonRect.sizeDelta = new Vector2(260f, 80f);
-
-        Image buttonImage = buttonGo.GetComponent<Image>();
-        buttonImage.color = new Color(1f, 1f, 1f, 0.95f);
-        _stageClearNextButton = buttonGo.GetComponent<Button>();
-        _stageClearNextButton.targetGraphic = buttonImage;
-        _stageClearNextButton.onClick.AddListener(GoToNextStage);
-
-        GameObject buttonTextGo = new GameObject("StageClearNextButtonText", typeof(RectTransform), typeof(Text));
-        RectTransform buttonTextRect = buttonTextGo.GetComponent<RectTransform>();
-        buttonTextRect.SetParent(buttonRect, false);
-        buttonTextRect.anchorMin = Vector2.zero;
-        buttonTextRect.anchorMax = Vector2.one;
-        buttonTextRect.offsetMin = Vector2.zero;
-        buttonTextRect.offsetMax = Vector2.zero;
-
-        Text buttonText = buttonTextGo.GetComponent<Text>();
-        buttonText.font = GetBuiltinFont();
-        buttonText.alignment = TextAnchor.MiddleCenter;
-        buttonText.horizontalOverflow = HorizontalWrapMode.Overflow;
-        buttonText.verticalOverflow = VerticalWrapMode.Overflow;
-        buttonText.fontSize = stageClearButtonFontSize;
-        buttonText.color = Color.black;
-        buttonText.raycastTarget = false;
-        buttonText.text = stageClearButtonText;
-
-        // Leaderboard button
-        GameObject lbButtonGo = new GameObject("StageClearLeaderboardButton", typeof(RectTransform), typeof(Image), typeof(Button));
-        RectTransform lbButtonRect = lbButtonGo.GetComponent<RectTransform>();
-        lbButtonRect.SetParent(panelRect, false);
-        lbButtonRect.anchorMin = new Vector2(0.5f, 0f);
-        lbButtonRect.anchorMax = new Vector2(0.5f, 0f);
-        lbButtonRect.pivot = new Vector2(0.5f, 0f);
-        lbButtonRect.anchoredPosition = new Vector2(0f, -60f);
-        lbButtonRect.sizeDelta = new Vector2(260f, 60f);
-
-        Image lbButtonImage = lbButtonGo.GetComponent<Image>();
-        lbButtonImage.color = new Color(0.3f, 0.3f, 0.3f, 0.9f);
-        Button lbButton = lbButtonGo.GetComponent<Button>();
-        lbButton.targetGraphic = lbButtonImage;
-        lbButton.onClick.AddListener(OnStageClearLeaderboardClicked);
-
-        GameObject lbButtonTextGo = new GameObject("StageClearLeaderboardButtonText", typeof(RectTransform), typeof(Text));
-        RectTransform lbButtonTextRect = lbButtonTextGo.GetComponent<RectTransform>();
-        lbButtonTextRect.SetParent(lbButtonRect, false);
-        lbButtonTextRect.anchorMin = Vector2.zero;
-        lbButtonTextRect.anchorMax = Vector2.one;
-        lbButtonTextRect.offsetMin = Vector2.zero;
-        lbButtonTextRect.offsetMax = Vector2.zero;
-
-        Text lbButtonText = lbButtonTextGo.GetComponent<Text>();
-        lbButtonText.font = GetBuiltinFont();
-        lbButtonText.alignment = TextAnchor.MiddleCenter;
-        lbButtonText.horizontalOverflow = HorizontalWrapMode.Overflow;
-        lbButtonText.verticalOverflow = VerticalWrapMode.Overflow;
-        lbButtonText.fontSize = stageClearButtonFontSize - 4;
-        lbButtonText.color = Color.white;
-        lbButtonText.raycastTarget = false;
-        lbButtonText.text = "리더보드";
-
-        _stageClearPanel = panelGo;
-        _stageClearPanel.SetActive(false);
-    }
-
-    public void SetStageClearUIVisible(bool visible)
-    {
-        if (visible)
-        {
-            EnsureStageClearPanel();
-            UpdateStageClearScoreText();
-        }
-
-        if (_stageClearPanel != null)
-        {
-            _stageClearPanel.SetActive(visible);
+            Debug.Log($"[PlayerController] TriggerStageClear: zeroing velocity at pos={transform.position} vel={_rb.velocity}");
+            _rb.velocity = Vector3.zero;
+            _rb.angularVelocity = Vector3.zero;
+            _rb.isKinematic = true;
         }
     }
 
@@ -1370,33 +1178,8 @@ public class PlayerController : MonoBehaviour
         GameManager.Instance?.GoToMainMenu();
     }
 
-    private void GoToNextStage()
-    {
-        if (_stageClearPanel != null)
-        {
-            _stageClearPanel.SetActive(false);
-        }
-
-        GameManager.Instance?.GoToNextStage();
-    }
-
-    private void OnStageClearLeaderboardClicked()
-    {
-        LeaderboardUI lbUI = FindObjectOfType<LeaderboardUI>();
-        if (lbUI != null)
-        {
-            lbUI.RefreshLeaderboard();
-            lbUI.Show();
-        }
-    }
-
     public void ResetToStartState()
     {
-        if (_stageClearPanel != null)
-        {
-            _stageClearPanel.SetActive(false);
-        }
-
         _isOutOfBounds = false;
         _isStageCleared = false;
         _noGroundTimer = 0f;
