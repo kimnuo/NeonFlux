@@ -1124,6 +1124,13 @@ public class PlayerController : MonoBehaviour
             _rb.angularVelocity = Vector3.zero;
             _rb.isKinematic = true;
         }
+
+        // 강제로 초기 위치 (0,0,0)로 이동
+        transform.position = Vector3.zero;
+        transform.rotation = Quaternion.identity;
+        _yawAngle = 0f;
+        _initialYawAngle = 0f;
+        Debug.Log($"[PlayerController] TriggerStageClear: forced reset to (0,0,0), now at {transform.position}");
     }
 
     private void UpdateOutOfBounds(bool hasGround)

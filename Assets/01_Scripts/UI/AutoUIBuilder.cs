@@ -112,6 +112,14 @@ public class AutoUIBuilder : MonoBehaviour
             Debug.Log("[AutoUIBuilder] Created MenuHighScoreText");
         }
 
+        // Start Button
+        if (!hasStartButton)
+        {
+            GameObject startBtn = CreateButtonAtTop("StartButton", _mainMenuRoot.transform,
+                "게임 시작", -380f, new Vector2(360f, 90f), new Color(0f, 0.6f, 0.6f, 1f), 36);
+            Debug.Log("[AutoUIBuilder] Created StartButton");
+        }
+
         // Leaderboard Button
         if (!hasLeaderboardButton)
         {
