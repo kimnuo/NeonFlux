@@ -282,8 +282,7 @@ public static class NeonFluxUISetupEditor
             CreateTextObject("LastScoreText", panel.transform, new Vector2(0f, -40f), new Vector2(500f, 50f), 28, new Color(1f, 1f, 0.6f), TextAnchor.MiddleCenter, "");
 
             // Buttons
-            CreateButton("NextStageButton", panel.transform, "다음 단계", new Vector2(0f, -120f), new Vector2(280f, 60f), new Color(0f, 0.6f, 0.6f, 1f));
-            CreateButton("MainMenuButton", panel.transform, "메인 메뉴", new Vector2(0f, -200f), new Vector2(280f, 60f), new Color(0.4f, 0.4f, 0.4f, 0.9f));
+            CreateButton("MainMenuButton", panel.transform, "메인 메뉴", new Vector2(0f, -150f), new Vector2(280f, 60f), new Color(0.4f, 0.4f, 0.4f, 0.9f));
             CreateButton("LeaderboardButton", panel.transform, "리더보드", new Vector2(0f, -290f), new Vector2(280f, 60f), new Color(0.3f, 0.3f, 0.3f, 0.9f));
 
             panel.SetActive(false);
@@ -298,7 +297,6 @@ public static class NeonFluxUISetupEditor
         scUI.highScoreText = panel.transform.Find("HighScoreText")?.GetComponent<Text>();
         scUI.messageText = panel.transform.Find("MessageText")?.GetComponent<Text>();
         scUI.lastScoreText = panel.transform.Find("LastScoreText")?.GetComponent<Text>();
-        scUI.nextStageButton = panel.transform.Find("NextStageButton")?.GetComponent<Button>();
         scUI.mainMenuButton = panel.transform.Find("MainMenuButton")?.GetComponent<Button>();
         scUI.leaderboardButton = panel.transform.Find("LeaderboardButton")?.GetComponent<Button>();
     }

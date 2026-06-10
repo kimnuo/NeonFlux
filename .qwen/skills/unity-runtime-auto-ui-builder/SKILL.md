@@ -178,6 +178,44 @@ private void WireButton(string name, System.Action action, GameObject parent)
 2. **Null references**: Log each component reference status during `WireReferences()` to pinpoint failures
 3. **Duplicate creation**: Always check existence before creating to avoid duplicates on scene reloads
 4. **Execution order**: If AutoUIBuilder runs before SaveManager, `UpdateHighScoreDisplay()` will fail — ensure load order or add null checks
+5. **`GetComponent<MonoBehaviour>()` returns first component, not the target UI**: A GameObject with `Image` + `StageClearUI` components will return `Image` from `GetComponent<MonoBehaviour>()`, causing reflection-based method invocation to fail with "method not found". Use `GetComponents<MonoBehaviour>()` and iterate all components to find the one with the target method:
+
+```csharp
+// WRONG - returns Image, not StageClearUI
+var mb = stageClearUI.GetComponent<MonoBehaviour>();
+var method = mb.GetType().GetMethod("ShowStageClear", ...);  // method is null!
+
+// RIGHT - iterate all MonoBehaviour components
+var components = stageClearUI.GetComponents<MonoBehaviour>();
+foreach (var comp in components)
+{
+    var method = comp.GetType().GetMethod("ShowStageClear", ...);
+    if (method != null) { method.Invoke(comp, args); break; }
+}
+```
+
+6. **`SetActive(true)` silently fails on panel references set by AutoUIBuilder**: When a UI component's `panel` field is wired by AutoUIBuilder but `panel.SetActive(true)` has no effect (`activeSelf` remains `false`), the reference is stale or corrupted. This can happen when the GameObject is replaced or re-created during scene reloads.
+
+**Fix:** In `GameManager.ApplyStateVisuals()`, use `FindObjectOfType<T>()` to find the live UI component at call time, ensure `panel` is set, then invoke directly:
+
+```csharp
+if (CurrentState == GameState.StageClear)
+{
+    var scUI = FindObjectOfType<StageClearUI>();
+    if (scUI != null)
+    {
+        // Ensure panel reference is valid (fallback to component's own GameObject)
+        if (scUI.panel == null)
+            scUI.panel = scUI.gameObject;
+
+        scUI.ShowStageClear(_currentGameScore, _lastStageClearReason);
+    }
+}
+```
+
+This bypasses the potentially stale `stageClearUI` GameObject field and finds the live component at runtime.
+
+7. **`_startPosition` capture timing**: If PlayerController captures `_startPosition` in `Awake()`, it may get `(0,0,0)` because the prefab hasn't been fully positioned yet. Capture in `Start()` instead, after all scene objects are placed.
 
 ## Verification Steps
 1. Run game and check console for `[AutoUIBuilder]` logs

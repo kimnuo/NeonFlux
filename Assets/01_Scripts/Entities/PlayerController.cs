@@ -185,8 +185,6 @@ public class PlayerController : MonoBehaviour
         scoreXPoints = Mathf.Max(0, scoreXPoints);
         frontImpactPitchLockDuration = Mathf.Max(0f, frontImpactPitchLockDuration);
         _initialMaxForwardSpeed = maxForwardSpeed;
-        _startPosition = transform.position;
-        _startRotation = transform.rotation;
         AdjustBodyColliderToWheelHeight();
         InitializeWheelVisuals();
         EnsureDigitalSpeedometer();
@@ -249,6 +247,11 @@ public class PlayerController : MonoBehaviour
 
     private void Start()
     {
+        // Capture actual position after scene setup (Awake runs too early)
+        _startPosition = transform.position;
+        _startRotation = transform.rotation;
+        Debug.Log($"[PlayerController] Start: captured startPos={_startPosition}");
+
         if (GameManager.Instance != null && GameManager.Instance.CurrentState != GameState.Playing)
         {
             _rb.velocity = Vector3.zero;
@@ -1151,6 +1154,13 @@ public class PlayerController : MonoBehaviour
             _rb.isKinematic = true;
         }
 
+        // 강제로 초기 위치 (0,0,0)로 이동
+        transform.position = Vector3.zero;
+        transform.rotation = Quaternion.identity;
+        _yawAngle = 0f;
+        _initialYawAngle = 0f;
+        Debug.Log($"[PlayerController] TriggerOutOfBounds: forced reset to (0,0,0), now at {transform.position}");
+
         GameManager.Instance?.SetGameOver("플레이어가 코스를 이탈했습니다.");
     }
 
@@ -1161,8 +1171,11 @@ public class PlayerController : MonoBehaviour
         GameManager.Instance?.GoToMainMenu();
     }
 
+    public Vector3 GetStartPosition() => _startPosition;
+
     public void ResetToStartState()
     {
+        Debug.Log($"[PlayerController] ResetToStartState: from pos={transform.position} to startPos={_startPosition}");
         _isOutOfBounds = false;
         _isStageCleared = false;
         _noGroundTimer = 0f;
@@ -1182,6 +1195,7 @@ public class PlayerController : MonoBehaviour
         _initialYawAngle = _yawAngle;
         _frontImpactPitchLockTimer = 0f;
         ResetScoreTracking();
+        Debug.Log($"[PlayerController] ResetToStartState: done, now at pos={transform.position}");
     }
 
     public void SetGameplayUIVisible(bool visible)

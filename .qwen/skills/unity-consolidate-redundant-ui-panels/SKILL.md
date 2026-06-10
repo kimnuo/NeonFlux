@@ -113,29 +113,42 @@ private void AddScore(int amount)
 }
 ```
 
-### Step 5: Match Button Behavior
+### Step 5: Centralize Main Menu Reset in GameManager
 
-If the removed panel had different button behavior than the remaining panel, update the remaining panel's button handler to match.
-
-Example: OutOfBoundsPanel's home button called `ReturnToMainMenu()` which resets player state, but GameOverPanel's main menu button only called `GoToMainMenu()`:
+If the removed panel had button behavior that resets the player before going to main menu, centralize this in `GameManager.GoToMainMenu()` instead of duplicating in each UI component:
 
 ```csharp
-// In GameOverUI.cs - update to match OutOfBoundsPanel behavior
-private void OnMainMenuClicked()
+// In GameManager.cs
+public void GoToMainMenu()
 {
-    // Add the reset that OutOfBoundsPanel had
-    PlayerController player = FindObjectOfType<PlayerController>();
-    if (player != null)
+    ResetStageObjects();
+
+    PlayerController playerController = FindObjectOfType<PlayerController>();
+    if (playerController != null)
     {
-        player.ResetToStartState();
+        playerController.ResetToStartState();
     }
 
+    CurrentState = GameState.MainMenu;
+    _currentGameScore = 0;
+    ApplyStateVisuals();
+}
+```
+
+Then ALL UI "Main Menu" button handlers become identical and simple:
+
+```csharp
+// GameOverUI.cs, StageClearUI.cs, etc. - all the same
+private void OnMainMenuClicked()
+{
     if (GameManager.Instance != null)
     {
         GameManager.Instance.GoToMainMenu();
     }
 }
 ```
+
+This avoids duplicating `FindObjectOfType<PlayerController>().ResetToStartState()` in every UI component's main menu handler.
 
 ## What to Keep vs Remove
 

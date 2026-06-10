@@ -94,12 +94,6 @@ public class GameOverUI : MonoBehaviour
 
     private void OnMainMenuClicked()
     {
-        PlayerController player = FindObjectOfType<PlayerController>();
-        if (player != null)
-        {
-            player.ResetToStartState();
-        }
-
         if (GameManager.Instance != null)
         {
             GameManager.Instance.GoToMainMenu();

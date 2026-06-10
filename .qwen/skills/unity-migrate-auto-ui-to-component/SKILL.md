@@ -132,8 +132,6 @@ public class StageClearUI : MonoBehaviour
 
     private void OnMainMenuClicked()
     {
-        PlayerController player = FindObjectOfType<PlayerController>();
-        if (player != null) player.ResetToStartState();
         if (GameManager.Instance != null)
             GameManager.Instance.GoToMainMenu();
     }
@@ -203,30 +201,27 @@ playerController.SetStageClearUIVisible(CurrentState == GameState.StageClear);
 // NEW - remove this line, StageClearUI is handled below
 ```
 
-Add StageClear handling in `ApplyStateVisuals()`:
+Add StageClear handling in `ApplyStateVisuals()` — prefer `FindObjectOfType<T>()` over reflection for reliability:
 
 ```csharp
-// Stage clear handling: show StageClear UI via reflection
+// PREFERRED approach: FindObjectOfType (simple, reliable)
 if (CurrentState == GameState.StageClear)
 {
-    if (stageClearUI != null)
+    var scUI = FindObjectOfType<StageClearUI>();
+    if (scUI != null)
     {
-        var mb = stageClearUI.GetComponent<MonoBehaviour>();
-        if (mb != null)
-        {
-            var method = mb.GetType().GetMethod("ShowStageClear",
-                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-            if (method != null)
-            {
-                try { method.Invoke(mb, new object[] { _currentGameScore, _lastStageClearReason }); }
-                catch { stageClearUI.SetActive(true); }
-            }
-            else stageClearUI.SetActive(true);
-        }
-        else stageClearUI.SetActive(true);
+        scUI.ShowStageClear(_currentGameScore, _lastStageClearReason);
+    }
+    else
+    {
+        Debug.LogError("No StageClearUI found in scene!");
     }
 }
 ```
+
+**Why FindObjectOfType over reflection?** `GetComponent<MonoBehaviour>()` returns the **first** MonoBehaviour on the GameObject, which is often `Image` (added when creating the panel). Even `GetComponents<MonoBehaviour>()` with iteration can fail if the panel is corrupted or won't activate. `FindObjectOfType<StageClearUI>()` directly finds the component with the method, bypassing all component-order issues.
+
+**Fallback**: If the pre-built panel won't activate (`SetActive(true)` is silently ignored), see the [Unity UI Dynamic Panel Fallback](../unity-ui-dynamic-panel-fallback/SKILL.md) skill for creating the panel dynamically at runtime inside the `Show*` method.
 
 ### Step 3: Update AutoUIBuilder
 

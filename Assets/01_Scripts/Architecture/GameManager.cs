@@ -123,12 +123,16 @@ public class GameManager : Singleton<GameManager>
 
     public void StartGame()
     {
+        PlayerController playerController = FindObjectOfType<PlayerController>();
+        Debug.Log($"[GameManager] StartGame before ResetStageObjects: playerPos={(playerController != null ? playerController.transform.position.ToString() : "NULL")}");
+
         ResetStageObjects();
 
-        PlayerController playerController = FindObjectOfType<PlayerController>();
         if (playerController != null)
         {
+            Debug.Log($"[GameManager] StartGame before ResetToStartState: playerPos={playerController.transform.position}, startPos={playerController.GetStartPosition()}");
             playerController.ResetToStartState();
+            Debug.Log($"[GameManager] StartGame after ResetToStartState: playerPos={playerController.transform.position}");
         }
 
         CurrentState = GameState.Playing;
@@ -139,7 +143,15 @@ public class GameManager : Singleton<GameManager>
     public void GoToMainMenu()
     {
         ResetStageObjects();
+
+        PlayerController playerController = FindObjectOfType<PlayerController>();
+        if (playerController != null)
+        {
+            playerController.ResetToStartState();
+        }
+
         CurrentState = GameState.MainMenu;
+        _currentGameScore = 0;
         ApplyStateVisuals();
     }
 
@@ -254,51 +266,79 @@ public class GameManager : Singleton<GameManager>
         {
             if (gameOverUI != null)
             {
-                // Try to invoke ShowGameOver(int score, string reason) if present
-                var mb = gameOverUI.GetComponent<MonoBehaviour>();
-                if (mb != null)
-                {
-                    var method = mb.GetType().GetMethod("ShowGameOver", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
-                    if (method != null)
-                    {
-                        try { method.Invoke(mb, new object[] { _currentGameScore, _lastGameOverReason }); } catch { gameOverUI.SetActive(true); }
-                    }
-                    else
-                    {
-                        gameOverUI.SetActive(true);
-                    }
-                }
-                else
+                if (!TryInvokeUIMethod(gameOverUI, "ShowGameOver", _currentGameScore, _lastGameOverReason))
                 {
                     gameOverUI.SetActive(true);
                 }
             }
         }
 
-        // Stage clear handling: show StageClear UI and pass data if component supports it
+        // Stage clear handling: show StageClear UI
         if (CurrentState == GameState.StageClear)
         {
-            if (stageClearUI != null)
+            Debug.Log("[GameManager] StageClear state - trying to show StageClear UI");
+
+            // Find StageClearUI component anywhere in the scene
+            var scUI = FindObjectOfType<StageClearUI>();
+            if (scUI != null)
             {
-                var mb = stageClearUI.GetComponent<MonoBehaviour>();
-                if (mb != null)
+                Debug.Log($"[GameManager] Found StageClearUI on: {scUI.gameObject.name}");
+
+                // Ensure panel is set
+                if (scUI.panel == null)
                 {
-                    var method = mb.GetType().GetMethod("ShowStageClear", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
-                    if (method != null)
-                    {
-                        try { method.Invoke(mb, new object[] { _currentGameScore, _lastStageClearReason }); } catch { stageClearUI.SetActive(true); }
-                    }
-                    else
-                    {
-                        stageClearUI.SetActive(true);
-                    }
+                    scUI.panel = scUI.gameObject;
+                    Debug.Log($"[GameManager] Set panel to: {scUI.panel.name}");
                 }
-                else
+
+                Debug.Log($"[GameManager] Calling ShowStageClear(score={_currentGameScore}, reason={_lastStageClearReason})");
+                scUI.ShowStageClear(_currentGameScore, _lastStageClearReason);
+                Debug.Log($"[GameManager] After ShowStageClear: panel activeSelf={scUI.panel?.activeSelf}");
+            }
+            else
+            {
+                Debug.LogError("[GameManager] No StageClearUI found in scene!");
+                // Last resort: activate stageClearUI field directly
+                if (stageClearUI != null)
                 {
                     stageClearUI.SetActive(true);
+                    var anyUI = stageClearUI.GetComponent<StageClearUI>();
+                    if (anyUI != null) anyUI.ShowStageClear(_currentGameScore, _lastStageClearReason);
                 }
             }
         }
+    }
+
+    private bool TryInvokeUIMethod<T1, T2>(GameObject target, string methodName, T1 arg1, T2 arg2)
+    {
+        var components = target.GetComponents<MonoBehaviour>();
+        Debug.Log($"[GameManager] TryInvokeUIMethod: {methodName} on {target.name}, found {components.Length} components");
+        foreach (var comp in components)
+        {
+            if (comp == null)
+            {
+                Debug.Log($"[GameManager]   - skipping null component");
+                continue;
+            }
+            var method = comp.GetType().GetMethod(methodName,
+                BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            if (method != null)
+            {
+                Debug.Log($"[GameManager]   - Found {methodName} on {comp.GetType().Name}!");
+                try
+                {
+                    method.Invoke(comp, new object[] { arg1, arg2 });
+                    return true;
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogError($"[GameManager] {methodName} invoke failed: {e.Message}");
+                    return false;
+                }
+            }
+        }
+        Debug.LogWarning($"[GameManager] {methodName} not found on any component of {target.name}");
+        return false;
     }
 
     private void ResetStageObjects()

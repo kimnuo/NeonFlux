@@ -260,8 +260,6 @@ public class AutoUIBuilder : MonoBehaviour
                 new Vector2(0f, -10f), new Vector2(550f, 50f), 30, new Color(1f, 1f, 0.6f), TextAnchor.MiddleCenter);
 
             // Buttons
-            CreateButton("NextStageButton", _stageClearPanel.transform,
-                "다음 단계", new Vector2(0f, -130f), new Vector2(300f, 65f), new Color(0f, 0.6f, 0.6f, 1f), 28);
             CreateButton("MainMenuButton", _stageClearPanel.transform,
                 "메인 메뉴", new Vector2(0f, -220f), new Vector2(300f, 65f), new Color(0.4f, 0.4f, 0.4f, 0.9f), 28);
             CreateButton("LeaderboardButton", _stageClearPanel.transform,
@@ -271,7 +269,12 @@ public class AutoUIBuilder : MonoBehaviour
         }
 
         _stageClearUI = _stageClearPanel.GetComponent<StageClearUI>();
-        if (_stageClearUI == null) _stageClearUI = _stageClearPanel.AddComponent<StageClearUI>();
+        if (_stageClearUI == null)
+        {
+            _stageClearUI = _stageClearPanel.AddComponent<StageClearUI>();
+            Debug.Log($"[AutoUIBuilder] BuildStageClear: Added StageClearUI to {_stageClearPanel.name}");
+        }
+        Debug.Log($"[AutoUIBuilder] BuildStageClear complete: _stageClearPanel={_stageClearPanel.name}, _stageClearUI={_stageClearUI != null}");
     }
 
     private void WireReferences()
@@ -324,7 +327,15 @@ public class AutoUIBuilder : MonoBehaviour
         {
             var scField = typeof(GameManager).GetField("stageClearUI",
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            if (scField != null) scField.SetValue(GameManager.Instance, _stageClearPanel);
+            if (scField != null)
+            {
+                scField.SetValue(GameManager.Instance, _stageClearPanel);
+                Debug.Log($"[AutoUIBuilder] Assigned stageClearUI to GameManager: {_stageClearPanel.name}");
+            }
+        }
+        else
+        {
+            Debug.LogWarning($"[AutoUIBuilder] Cannot assign stageClearUI - GameManager={GameManager.Instance != null}, _stageClearPanel={(_stageClearPanel != null ? _stageClearPanel.name : "NULL")}");
         }
 
         // Wire button clicks
@@ -333,7 +344,6 @@ public class AutoUIBuilder : MonoBehaviour
         WireButton("CloseButton", () => { if (_leaderboardPanel != null) _leaderboardPanel.SetActive(false); }, _leaderboardPanel);
         WireButton("MainMenuButton", () => GameManager.Instance?.GoToMainMenu(), _gameOverPanel);
         WireButton("LeaderboardButton", OnLeaderboardClicked, _gameOverPanel);
-        WireButton("NextStageButton", () => GameManager.Instance?.GoToNextStage(), _stageClearPanel);
         WireButton("MainMenuButton", () => GameManager.Instance?.GoToMainMenu(), _stageClearPanel);
         WireButton("LeaderboardButton", OnLeaderboardClicked, _stageClearPanel);
 
@@ -357,9 +367,13 @@ public class AutoUIBuilder : MonoBehaviour
             _stageClearUI.highScoreText = FindChildText(_stageClearPanel, "HighScoreText");
             _stageClearUI.messageText = FindChildText(_stageClearPanel, "MessageText");
             _stageClearUI.lastScoreText = FindChildText(_stageClearPanel, "LastScoreText");
-            _stageClearUI.nextStageButton = FindChildButton(_stageClearPanel, "NextStageButton");
             _stageClearUI.mainMenuButton = FindChildButton(_stageClearPanel, "MainMenuButton");
             _stageClearUI.leaderboardButton = FindChildButton(_stageClearPanel, "LeaderboardButton");
+            Debug.Log($"[AutoUIBuilder] StageClearUI wired. panel={_stageClearUI.panel != null}, scoreText={_stageClearUI.scoreText != null}, messageText={_stageClearUI.messageText != null}");
+        }
+        else
+        {
+            Debug.LogError("[AutoUIBuilder] _stageClearUI is NULL! Cannot wire.");
         }
 
         // Update high score display
