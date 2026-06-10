@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Agent(Explore)"
+      "Agent(Explore)",
+      "Bash(pip install *)"
     ]
   },
   "$version": 4

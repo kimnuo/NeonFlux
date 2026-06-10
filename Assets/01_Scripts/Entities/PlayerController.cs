@@ -1154,23 +1154,6 @@ public class PlayerController : MonoBehaviour
         GameManager.Instance?.SetGameOver("플레이어가 코스를 이탈했습니다.");
     }
 
-    private void TriggerStageClear()
-    {
-        if (_isStageCleared)
-        {
-            return;
-        }
-
-        _isStageCleared = true;
-        if (_rb != null)
-        {
-            Debug.Log($"[PlayerController] TriggerStageClear: zeroing velocity at pos={transform.position} vel={_rb.velocity}");
-            _rb.velocity = Vector3.zero;
-            _rb.angularVelocity = Vector3.zero;
-            _rb.isKinematic = true;
-        }
-    }
-
     private void ReturnToMainMenu()
     {
         ResetToStartState();
