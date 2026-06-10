@@ -11,28 +11,23 @@ public class GameOverUI : MonoBehaviour
     public Text scoreText;
     public Text reasonText;
     public Text highScoreText;
-    
+    public Text lastScoreText;
+
     [Header("Buttons")]
-    public Button retryButton;
     public Button mainMenuButton;
     public Button leaderboardButton;
-    
+
     [Header("Settings")]
-    [SerializeField] private string retryButtonText = "다시 하기";
     [SerializeField] private string mainMenuButtonText = "메인 메뉴";
     [SerializeField] private string leaderboardButtonText = "리더보드";
     [SerializeField] private string reasonFormat = "사망: {0}";
+    [SerializeField] private string lastScoreFormat = "기록 점수: {0}";
 
     private void Awake()
     {
         if (panel != null) panel.SetActive(false);
-        
+
         // 버튼 이벤트 연결
-        if (retryButton != null)
-        {
-            retryButton.onClick.RemoveAllListeners();
-            retryButton.onClick.AddListener(OnRetryClicked);
-        }
         if (mainMenuButton != null)
         {
             mainMenuButton.onClick.RemoveAllListeners();
@@ -51,22 +46,40 @@ public class GameOverUI : MonoBehaviour
     public void ShowGameOver(int score, string reason)
     {
         if (panel != null) panel.SetActive(true);
-        
+
         if (scoreText != null)
         {
             scoreText.text = string.Format("점수: {0}", score);
         }
-        
+
         if (reasonText != null)
         {
             string reasonLabel = GetReasonLabel(reason);
             reasonText.text = string.Format(reasonFormat, reasonLabel);
         }
-        
+
         if (highScoreText != null && SaveManager.Instance != null)
         {
             highScoreText.text = string.Format("최고 점수: {0}", SaveManager.Instance.HighScore);
         }
+
+        // 기록 점수 표시 (이전 게임 점수)
+        if (lastScoreText != null && SaveManager.Instance != null)
+        {
+            int lastScore = GetLastRecordedScore();
+            lastScoreText.text = string.Format(lastScoreFormat, lastScore);
+        }
+    }
+
+    private int GetLastRecordedScore()
+    {
+        if (SaveManager.Instance == null) return 0;
+        var leaderboard = SaveManager.Instance.Leaderboard;
+        if (leaderboard != null && leaderboard.Count > 0)
+        {
+            return leaderboard[0].score;
+        }
+        return 0;
     }
 
     private string GetReasonLabel(string reason)
@@ -79,16 +92,14 @@ public class GameOverUI : MonoBehaviour
         return reason;
     }
 
-    private void OnRetryClicked()
-    {
-        if (GameManager.Instance != null)
-        {
-            GameManager.Instance.StartGame();
-        }
-    }
-
     private void OnMainMenuClicked()
     {
+        PlayerController player = FindObjectOfType<PlayerController>();
+        if (player != null)
+        {
+            player.ResetToStartState();
+        }
+
         if (GameManager.Instance != null)
         {
             GameManager.Instance.GoToMainMenu();

@@ -204,9 +204,11 @@ public class AutoUIBuilder : MonoBehaviour
             CreateText("ReasonText", _gameOverPanel.transform,
                 new Vector2(0f, 70f), new Vector2(550f, 50f), 26, new Color(1f, 0.6f, 0.6f), TextAnchor.MiddleCenter);
 
+            // Last Score Text
+            CreateText("LastScoreText", _gameOverPanel.transform,
+                new Vector2(0f, -10f), new Vector2(550f, 50f), 30, new Color(1f, 1f, 0.6f), TextAnchor.MiddleCenter);
+
             // Buttons
-            CreateButton("RetryButton", _gameOverPanel.transform,
-                "다시 하기", new Vector2(0f, -100f), new Vector2(300f, 75f), new Color(0f, 0.6f, 0.6f, 1f), 30);
             CreateButton("MainMenuButton", _gameOverPanel.transform,
                 "메인 메뉴", new Vector2(0f, -200f), new Vector2(300f, 65f), new Color(0.4f, 0.4f, 0.4f, 0.9f), 28);
             CreateButton("LeaderboardButton", _gameOverPanel.transform,
@@ -266,7 +268,6 @@ public class AutoUIBuilder : MonoBehaviour
         WireButton("StartButton", () => GameManager.Instance?.StartGame(), _mainMenuRoot);
         WireButton("LeaderboardButton", OnLeaderboardClicked, _mainMenuRoot);
         WireButton("CloseButton", () => { if (_leaderboardPanel != null) _leaderboardPanel.SetActive(false); }, _leaderboardPanel);
-        WireButton("RetryButton", () => GameManager.Instance?.StartGame(), _gameOverPanel);
         WireButton("MainMenuButton", () => GameManager.Instance?.GoToMainMenu(), _gameOverPanel);
         WireButton("LeaderboardButton", OnLeaderboardClicked, _gameOverPanel);
 
@@ -277,7 +278,7 @@ public class AutoUIBuilder : MonoBehaviour
             _gameOverUI.scoreText = FindChildText(_gameOverPanel, "ScoreText");
             _gameOverUI.highScoreText = FindChildText(_gameOverPanel, "HighScoreText");
             _gameOverUI.reasonText = FindChildText(_gameOverPanel, "ReasonText");
-            _gameOverUI.retryButton = FindChildButton(_gameOverPanel, "RetryButton");
+            _gameOverUI.lastScoreText = FindChildText(_gameOverPanel, "LastScoreText");
             _gameOverUI.mainMenuButton = FindChildButton(_gameOverPanel, "MainMenuButton");
             _gameOverUI.leaderboardButton = FindChildButton(_gameOverPanel, "LeaderboardButton");
         }

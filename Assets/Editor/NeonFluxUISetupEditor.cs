@@ -226,9 +226,11 @@ public static class NeonFluxUISetupEditor
             // Reason text
             GameObject reasonText = CreateTextObject("ReasonText", panel.transform, new Vector2(0f, 30f), new Vector2(500f, 50f), 24, new Color(1f, 0.6f, 0.6f), TextAnchor.MiddleCenter, "");
 
+            // Last score text
+            CreateTextObject("LastScoreText", panel.transform, new Vector2(0f, -40f), new Vector2(500f, 50f), 28, new Color(1f, 1f, 0.6f), TextAnchor.MiddleCenter, "");
+
             // Buttons
-            CreateButton("RetryButton", panel.transform, "다시 하기", new Vector2(0f, -120f), new Vector2(280f, 70f), new Color(0f, 0.6f, 0.6f, 1f));
-            CreateButton("MainMenuButton", panel.transform, "메인 메뉴", new Vector2(0f, -210f), new Vector2(280f, 60f), new Color(0.4f, 0.4f, 0.4f, 0.9f));
+            CreateButton("MainMenuButton", panel.transform, "메인 메뉴", new Vector2(0f, -130f), new Vector2(280f, 60f), new Color(0.4f, 0.4f, 0.4f, 0.9f));
             CreateButton("LeaderboardButton", panel.transform, "리더보드", new Vector2(0f, -290f), new Vector2(280f, 60f), new Color(0.3f, 0.3f, 0.3f, 0.9f));
 
             panel.SetActive(false);
@@ -242,7 +244,7 @@ public static class NeonFluxUISetupEditor
         goUI.scoreText = panel.transform.Find("ScoreText")?.GetComponent<Text>();
         goUI.highScoreText = panel.transform.Find("HighScoreText")?.GetComponent<Text>();
         goUI.reasonText = panel.transform.Find("ReasonText")?.GetComponent<Text>();
-        goUI.retryButton = panel.transform.Find("RetryButton")?.GetComponent<Button>();
+        goUI.lastScoreText = panel.transform.Find("LastScoreText")?.GetComponent<Text>();
         goUI.mainMenuButton = panel.transform.Find("MainMenuButton")?.GetComponent<Button>();
         goUI.leaderboardButton = panel.transform.Find("LeaderboardButton")?.GetComponent<Button>();
     }
